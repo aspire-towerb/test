@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ระบบจัดการและแจ้งรับพัสดุนิติบุคคล (แก้ไขหน้าบ้านครบถ้วน)</title>
+  <title>ระบบจัดการและแจ้งรับพัสดุนิติบุคคล (ภาพประกาศปรับตามหน้าจอ)</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -54,9 +54,33 @@
     .check-row label { margin: 0; font-weight: 500; cursor: pointer; }
     /* Slideshow */
     .slideshow-wrap { position: relative; overflow: hidden; border-radius: 12px; margin-bottom: 14px; }
-    #slideshowTrack { display: flex; width: 100%; }
+    #slideshowTrack { display: flex; width: 100%; align-items: flex-start; }
+    .slide-image-box {
+      margin-top: 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      width: 100%;
+    }
+    .slide-image-box img {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      max-height: 65vh;
+      margin: 0 auto;
+      border-radius: 8px;
+      object-fit: contain;
+    }
+    @media (max-width: 640px) {
+      .container { padding: 12px; }
+      .slide-image-box { padding: 6px; border-radius: 8px; }
+      .slide-image-box img { max-height: 55vh; border-radius: 6px; }
+    }
     .slide-nav {
-      position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.45);
+      position: absolute; top: 50%; transform: translateY(-50%); background: rgba(15,23,42,0.55);
       color: #fff; border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; z-index: 2;
     }
     .slide-nav.prev { left: 10px; }
@@ -145,12 +169,10 @@
             <label for="reqLocationSelect">จุดรับพัสดุ *</label>
             <select id="reqLocationSelect" required></select>
           </div>
-          <!-- แสดงเฉพาะจุดรับที่บังคับกรอกเบอร์โทร -->
           <div id="reqPhoneFieldWrap" style="display:none;">
             <label for="reqPhoneInput">เบอร์โทรศัพท์ติดต่อ <span id="phoneRequiredStar" style="color:red;">*</span></label>
             <input id="reqPhoneInput" type="tel" />
           </div>
-          <!-- ไม่แสดงช่องหมายเหตุและตัวอย่างค่าเริ่มต้น -->
           <div id="reqNoteFieldWrap">
             <label for="reqNoteInput">หมายเหตุเพิ่มเติม</label>
             <input id="reqNoteInput" />
@@ -616,7 +638,7 @@
 /* =========================================================
    1. STATE, STORAGE & FULL SETTINGS MODEL
    ========================================================= */
-const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V5';
+const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V6';
 const DEFAULT_CLOUD_URL = '';
 
 const defaultState = {
@@ -1011,19 +1033,23 @@ function initSlideshow() {
 
   track.innerHTML = slides.map((s, i) => {
     const safeUrl = (s.imageUrl || '').trim();
-    const bgStyle = safeUrl
-      ? `background: linear-gradient(rgba(15,23,42,0.58), rgba(15,23,42,0.78)), url('${escapeHTML(safeUrl)}') center/cover no-repeat;`
-      : `background: linear-gradient(135deg,#1e3a8a,#1d4ed8);`;
-    const imgPreviewHtml = safeUrl
-      ? `<div style="margin-top:10px;"><img src="${escapeHTML(safeUrl)}" alt="${escapeHTML(s.title)}" style="max-height:140px; max-width:100%; border-radius:8px; object-fit:cover; border:1px solid rgba(255,255,255,0.25);" onerror="this.style.display='none'" /></div>`
+    const separateImageCard = safeUrl
+      ? `<div class="slide-image-box">
+           <img src="${escapeHTML(safeUrl)}" alt="${escapeHTML(s.title)}" onerror="this.parentElement.style.display='none'" />
+         </div>`
       : '';
 
     return `
-      <div style="min-width:100%; padding:24px; ${bgStyle} color:#fff;">
-        <div style="font-size:12px; opacity:0.88;">${escapeHTML(state.settings.projectName || 'ประกาศนิติบุคคล')} (${i + 1}/${slides.length})</div>
-        <h3 style="margin:6px 0 4px; font-size:20px;">${escapeHTML(s.title)}</h3>
-        <p style="margin:0; font-size:14px; opacity:0.94;">${escapeHTML(s.subtitle || '')}</p>
-        ${imgPreviewHtml}
+      <div style="min-width:100%; background:#fff; border:1px solid var(--border); border-radius:12px; padding:18px; color:var(--text);">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding-bottom:10px; border-bottom:1px solid var(--border);">
+          <div>
+            <div style="font-size:12px; color:var(--muted);">${escapeHTML(state.settings.projectName || 'ประกาศนิติบุคคล')}</div>
+            <h3 style="margin:4px 0 0; font-size:18px; color:var(--primary-dark);">${escapeHTML(s.title)}</h3>
+          </div>
+          <span class="badge badge-reported">${i + 1}/${slides.length}</span>
+        </div>
+        ${s.subtitle ? `<p style="margin:10px 0 0; font-size:14px; color:var(--text);">${escapeHTML(s.subtitle)}</p>` : ''}
+        ${separateImageCard}
       </div>
     `;
   }).join('');
@@ -1100,7 +1126,6 @@ function syncPhoneFieldRequirement() {
   phoneInput.placeholder = required ? 'กรอกเบอร์โทรศัพท์ (จำเป็นสำหรับจุดรับนี้)' : '';
   if (phoneStar) phoneStar.style.display = required ? 'inline' : 'none';
   if (phoneWrap) {
-    // แสดงช่องกรอกเบอร์เฉพาะจุดรับที่บังคับกรอกเบอร์โทร
     phoneWrap.style.display = required ? 'block' : 'none';
     if (!required) phoneInput.value = '';
   }
@@ -1163,7 +1188,7 @@ function bindUserRequestForm() {
     const loc = getLocationById(locationId);
     const phoneRequired = Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false);
     const phone = phoneRequired ? (document.getElementById('reqPhoneInput')?.value || '').trim() : '';
-    const note = state.settings.showNoteField ? (document.getElementById('reqNoteInput')?.value || '').trim() : '';
+    const note = state.settings.showNoteField !== false ? (document.getElementById('reqNoteInput')?.value || '').trim() : '';
 
     if (!house) return alert('กรุณากรอกบ้านเลขที่ / ห้องชุด');
     if (!locationId || !loc) return alert('กรุณาเลือกจุดรับพัสดุ');
@@ -1222,7 +1247,7 @@ function populateSettingsForm() {
   document.getElementById('settingShowSlideshow').checked = s.showSlideshow !== false;
   document.getElementById('settingShowTicker').checked = s.showTicker !== false;
   document.getElementById('settingShowPhoneField').checked = s.showPhoneField !== false;
-  document.getElementById('settingShowNoteField').checked = Boolean(s.showNoteField);
+  document.getElementById('settingShowNoteField').checked = s.showNoteField !== false;
   document.getElementById('settingShowLatestBox').checked = Boolean(s.showLatestBox);
 
   document.getElementById('settingProjectPrefix').value = s.projectPrefix || '62/';
