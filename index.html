@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ระบบจัดการและแจ้งรับพัสดุนิติบุคคล (Multi-Device Sync)</title>
+  <title>ระบบจัดการและแจ้งรับพัสดุนิติบุคคล (แก้ไขหน้าบ้านครบถ้วน)</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -19,7 +19,7 @@
     }
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
     body { margin: 0; background: var(--bg); color: var(--text); }
-    .container { max-width: 1120px; margin: 0 auto; padding: 16px; }
+    .container { max-width: 1180px; margin: 0 auto; padding: 16px; }
     .topbar {
       background: linear-gradient(135deg, var(--primary-dark), var(--primary));
       color: #fff; padding: 14px 20px; display: flex; justify-content: space-between;
@@ -33,6 +33,7 @@
     }
     .btn-primary { background: var(--primary); color: #fff; }
     .btn-primary:hover { background: var(--primary-dark); }
+    .btn-success { background: var(--success); color: #fff; }
     .btn-light { background: rgba(255,255,255,0.18); color: #fff; }
     .btn-light.active { background: #fff; color: var(--primary-dark); }
     .btn-outline { background: #fff; border: 1px solid var(--border); color: var(--text); }
@@ -42,18 +43,21 @@
       background: var(--card); border: 1px solid var(--border); border-radius: 12px;
       padding: 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
-    .card h2, .card h3 { margin-top: 0; }
+    .card h2, .card h3, .card h4 { margin-top: 0; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
     label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
     input, select, textarea {
       width: 100%; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px;
     }
+    .check-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+    .check-row input[type="checkbox"] { width: auto; }
+    .check-row label { margin: 0; font-weight: 500; cursor: pointer; }
     /* Slideshow */
     .slideshow-wrap { position: relative; overflow: hidden; border-radius: 12px; margin-bottom: 14px; }
     #slideshowTrack { display: flex; width: 100%; }
     .slide-nav {
-      position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.35);
-      color: #fff; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+      position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.45);
+      color: #fff; border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; z-index: 2;
     }
     .slide-nav.prev { left: 10px; }
     .slide-nav.next { right: 10px; }
@@ -70,10 +74,13 @@
       display: none; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 10px;
       padding: 14px; margin-top: 14px;
     }
-    /* Stats & Admin Tabs */
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    /* Stats & Summary */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
     .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
     .stat-card .num { font-size: 26px; font-weight: 700; color: var(--primary); }
+    .loc-summary-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .loc-pill { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+    /* Tabs */
     .tab-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
     .tab-btn { background: #e2e8f0; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
     .tab-btn.active { background: var(--primary); color: #fff; }
@@ -88,6 +95,9 @@
     .badge-pending { background: #fef3c7; color: #92400e; }
     .badge-matched { background: #dcfce7; color: #166534; }
     .badge-reported { background: #e2e8f0; color: #334155; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+    th { background: #f1f5f9; }
     @media print {
       body * { visibility: hidden; }
       #a4ReportPreviewArea, #a4ReportPreviewArea * { visibility: visible; }
@@ -98,7 +108,7 @@
 <body>
 
 <header class="topbar">
-  <h1>ระบบแจ้งรับและจัดการพัสดุนิติบุคคล</h1>
+  <h1 id="headerSystemTitle">ระบบแจ้งรับและจัดการพัสดุนิติบุคคล</h1>
   <div class="mode-switch">
     <button type="button" id="btnShowUserPortal" class="btn btn-light active">หน้าลูกบ้าน (แจ้งรับพัสดุ)</button>
     <button type="button" id="btnShowAdminPortal" class="btn btn-light">ระบบหลังบ้าน (เจ้าหน้าที่)</button>
@@ -109,7 +119,7 @@
 
   <!-- ==================== 1. USER PORTAL ==================== -->
   <section id="userPortalSection">
-    <div class="slideshow-wrap" onmouseenter="clearInterval(slideTimer)" onmouseleave="initSlideshow()">
+    <div id="userSlideshowSection" class="slideshow-wrap" onmouseenter="clearInterval(slideTimer)" onmouseleave="initSlideshow()">
       <div id="slideshowTrack"></div>
       <button type="button" class="slide-nav prev" onclick="prevSlide()">‹</button>
       <button type="button" class="slide-nav next" onclick="nextSlide()">›</button>
@@ -117,12 +127,13 @@
     </div>
 
     <div class="ticker-bar" id="userAnnouncementTickerCard">
-      <div><strong>ประกาศ:</strong> <span id="userAnnouncementText"></span></div>
+      <div><strong>ประกาศนิติบุคคล:</strong> <span id="userAnnouncementText"></span></div>
       <span id="userAnnouncementCounter" class="badge badge-reported">1/1</span>
     </div>
 
     <div class="card">
-      <h2>แบบฟอร์มแจ้งขอรับพัสดุ</h2>
+      <h2 id="userFormHeading">แบบฟอร์มแจ้งขอรับพัสดุ</h2>
+      <p id="userFormSubtitle" style="margin-top:-6px; margin-bottom:14px; font-size:13px; color:var(--muted);"></p>
       <form id="userRequestForm">
         <div class="form-grid">
           <div>
@@ -134,13 +145,15 @@
             <label for="reqLocationSelect">จุดรับพัสดุ *</label>
             <select id="reqLocationSelect" required></select>
           </div>
-          <div>
-            <label for="reqPhoneInput">เบอร์โทรศัพท์ติดต่อ <span id="phoneRequiredStar" style="color:red;display:none;">*</span></label>
-            <input id="reqPhoneInput" type="tel" placeholder="เบอร์โทรศัพท์ (ถ้ามี)" />
+          <!-- แสดงเฉพาะจุดรับที่บังคับกรอกเบอร์โทร -->
+          <div id="reqPhoneFieldWrap" style="display:none;">
+            <label for="reqPhoneInput">เบอร์โทรศัพท์ติดต่อ <span id="phoneRequiredStar" style="color:red;">*</span></label>
+            <input id="reqPhoneInput" type="tel" />
           </div>
-          <div>
+          <!-- ไม่แสดงช่องหมายเหตุและตัวอย่างค่าเริ่มต้น -->
+          <div id="reqNoteFieldWrap">
             <label for="reqNoteInput">หมายเหตุเพิ่มเติม</label>
-            <input id="reqNoteInput" placeholder="เช่น ฝากไว้กับ รปภ. / รับช่วงเย็น" />
+            <input id="reqNoteInput" />
           </div>
         </div>
         <div style="margin-top:14px;">
@@ -185,7 +198,7 @@
           <strong>แผงควบคุมเจ้าหน้าที่นิติบุคคล</strong>
           <div id="cloudConnectionBadge" style="font-size:12px; color:var(--muted);">สถานะซิงค์: โหมดออฟไลน์ในเครื่อง</div>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button type="button" class="btn btn-outline btn-sm" onclick="manualSyncNow()">ดึงข้อมูลล่าสุดจาก Cloud</button>
           <button type="button" id="adminLogoutBtn" class="btn btn-danger btn-sm">ออกจากระบบ</button>
         </div>
@@ -207,28 +220,52 @@
         </div>
       </div>
 
-      <!-- Stats -->
+      <!-- 4 Stats Cards -->
       <div class="stats-grid">
         <div class="stat-card"><div>คำขอรับพัสดุทั้งหมด</div><div class="num" id="statTotalRequests">0</div></div>
-        <div class="stat-card"><div>คำขอที่รอพัสดุ</div><div class="num" id="statPendingRequests">0</div></div>
-        <div class="stat-card"><div>พัสดุประจำวันในระบบ</div><div class="num" id="statParcelsCount">0</div></div>
-        <div class="stat-card"><div>บ้านเลขที่ในระบบ</div><div class="num" id="statHousesCount">0</div></div>
+        <div class="stat-card"><div>คำขอที่ยังไม่มีพัสดุในระบบ</div><div class="num" id="statPendingRequests">0</div></div>
+        <div class="stat-card"><div>จำนวนบ้านเลขที่ในระบบ</div><div class="num" id="statHousesCount">0</div></div>
+        <div class="stat-card"><div>จำนวนภาพประกาศปัจจุบัน</div><div class="num" id="statSlidesCount">0</div></div>
       </div>
 
-      <!-- Tabs -->
+      <!-- Location Breakdown Summary -->
+      <div class="loc-summary-bar" id="locationSummaryBar"></div>
+
+      <!-- All 7 Tabs -->
       <div class="tab-bar">
-        <button type="button" class="tab-btn active" data-admin-tab="tabParcels">1. พัสดุประจำวัน & จับคู่</button>
-        <button type="button" class="tab-btn" data-admin-tab="tabSavedRequests">2. รายการคำขอทั้งหมด</button>
+        <button type="button" class="tab-btn active" data-admin-tab="tabParcels">1. พัสดุประจำวัน & จับคู่คำขอ</button>
+        <button type="button" class="tab-btn" data-admin-tab="tabSavedRequests">2. รายการคำขอที่บันทึก</button>
         <button type="button" class="tab-btn" data-admin-tab="tabReportA4">3. ออกรายงาน A4 / Excel</button>
-        <button type="button" class="tab-btn" data-admin-tab="tabLocationsHouses">4. จุดรับ & บ้านเลขที่</button>
-        <button type="button" class="tab-btn" data-admin-tab="tabSettings">5. ตั้งค่า & เชื่อม Cloud</button>
+        <button type="button" class="tab-btn" data-admin-tab="tabLocationsHouses">4. จุดรับพัสดุ & สร้างบ้านเลขที่</button>
+        <button type="button" class="tab-btn" data-admin-tab="tabAnnouncementsAdmins">5. ภาพประกาศ & บัญชีแอดมิน</button>
+        <button type="button" class="tab-btn" data-admin-tab="tabBackupDelete">6. สำรองไฟล์</button>
+        <button type="button" class="tab-btn" data-admin-tab="tabSettings">7. การตั้งค่า</button>
       </div>
 
-      <!-- TAB 1: PARCELS -->
+      <!-- TAB 1 -->
       <div id="tabParcels" class="admin-tab-panel">
         <div class="card">
-          <h3>เพิ่มพัสดุเข้าคลังประจำวัน (จับคู่กับคำขออัตโนมัติ)</h3>
-          <form id="adminAddParcelForm" class="form-grid">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+            <h3 style="margin:0;">รายการคำขอที่ยังไม่มีพัสดุในระบบ</h3>
+            <button type="button" class="btn btn-outline btn-sm" onclick="exportAndClearPendingRequests()">ส่งออก Excel & เคลียร์คำขอรอพัสดุ</button>
+          </div>
+          <ul id="unmatchedRequestsList"></ul>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            <h3 style="margin:0;">จัดการรายการพัสดุประจำวัน</h3>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline btn-sm" onclick="downloadParcelTemplate()">ดาวน์โหลดเทมเพลต Excel</button>
+              <label class="btn btn-outline btn-sm" style="margin:0; cursor:pointer;">
+                นำเข้า Excel/CSV
+                <input type="file" id="importParcelsExcelInput" accept=".xlsx,.xls,.csv" style="display:none;" />
+              </label>
+              <button type="button" class="btn btn-danger btn-sm" onclick="clearAllDailyParcels()">ล้างพัสดุประจำวันทั้งหมด</button>
+            </div>
+          </div>
+
+          <form id="adminAddParcelForm" class="form-grid" style="margin-bottom:14px;">
             <div>
               <label for="parcelHouseInput">บ้านเลขที่ *</label>
               <input id="parcelHouseInput" list="houseDatalist" placeholder="เช่น 62/1" required />
@@ -243,58 +280,98 @@
             </div>
             <div>
               <label for="parcelNoteInput">หมายเหตุ</label>
-              <input id="parcelNoteInput" placeholder="เช่น กล่องใหญ่ / เก็บเงินปลายทาง" />
+              <input id="parcelNoteInput" />
             </div>
-            <div style="display:flex; align-items:flex-end; gap:8px;">
-              <button type="submit" class="btn btn-primary">เพิ่มพัสดุ</button>
-              <label class="btn btn-outline" style="margin:0; cursor:pointer;">
-                นำเข้า Excel
-                <input type="file" id="importParcelsExcelInput" accept=".xlsx,.xls,.csv" style="display:none;" />
-              </label>
+            <div style="display:flex; align-items:flex-end;">
+              <button type="submit" class="btn btn-primary" style="width:100%;">เพิ่มพัสดุรายชิ้น</button>
             </div>
           </form>
-        </div>
 
-        <div class="card">
-          <h3>คำขอที่ยังไม่มีพัสดุในระบบ (รอพัสดุ)</h3>
-          <ul id="unmatchedRequestsList"></ul>
-        </div>
-
-        <div class="card">
-          <h3>รายการพัสดุประจำวัน</h3>
-          <ul id="dailyParcelsList"></ul>
+          <table>
+            <thead>
+              <tr>
+                <th>บ้านเลขที่</th><th>สถานะจับคู่</th><th>ขนส่ง</th><th>เลขพัสดุ</th><th>หมายเหตุ</th><th>เวลาเข้าระบบ</th><th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="dailyParcelsTableBody"></tbody>
+          </table>
         </div>
       </div>
 
-      <!-- TAB 2: ALL REQUESTS -->
+      <!-- TAB 2 -->
       <div id="tabSavedRequests" class="admin-tab-panel" style="display:none;">
         <div class="card">
-          <h3>บ้านเลขที่ที่จับคู่พัสดุแล้ว (เลือกเพื่อออกรายงาน A4)</h3>
+          <h3>บ้านเลขที่ที่จับคู่พัสดุแล้ว (เลือกเพื่อพิมพ์รายงาน A4)</h3>
           <div id="matchedHousesList" style="margin-bottom:12px;"></div>
-          <button type="button" class="btn btn-primary" onclick="createReportFromSelected()">ออกรายงาน A4 จากรายการที่เลือก</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" onclick="createReportFromSelected()">ออกรายงาน A4 จากบ้านที่เลือก</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="clearAllMatchedRequests()">ลบคำขอที่จับคู่สำเร็จแล้วทั้งหมด</button>
+          </div>
         </div>
+
         <div class="card">
-          <h3>รายการคำขอรับพัสดุทั้งหมด (ซิงค์จากหน้าลูกบ้านทันที)</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            <h3 style="margin:0;">ประวัติคำขอรับพัสดุทั้งหมด</h3>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline btn-sm" onclick="exportAllRequestsExcel()">ส่งออกคำขอ (.xlsx)</button>
+              <label class="btn btn-outline btn-sm" style="margin:0; cursor:pointer;">
+                นำเข้าคำขอ (.xlsx)
+                <input type="file" id="importRequestsExcelInput" accept=".xlsx,.xls,.csv" style="display:none;" />
+              </label>
+            </div>
+          </div>
+
+          <form id="adminAddRequestForm" class="form-grid" style="margin-bottom:14px; background:#f8fafc; padding:12px; border-radius:8px;">
+            <div>
+              <label>บ้านเลขที่ *</label>
+              <input id="adminReqHouseInput" list="houseDatalist" placeholder="เช่น 62/1" required />
+            </div>
+            <div>
+              <label>จุดรับพัสดุ *</label>
+              <select id="adminReqLocationSelect" required></select>
+            </div>
+            <div>
+              <label>เบอร์โทร</label>
+              <input id="adminReqPhoneInput" />
+            </div>
+            <div>
+              <label>หมายเหตุ</label>
+              <input id="adminReqNoteInput" />
+            </div>
+            <div style="display:flex; align-items:flex-end;">
+              <button type="submit" class="btn btn-primary" style="width:100%;">เพิ่มคำขอฝั่งแอดมิน</button>
+            </div>
+          </form>
+
           <div id="allRequestsList"></div>
         </div>
       </div>
 
-      <!-- TAB 3: REPORT A4 / EXCEL -->
+      <!-- TAB 3 -->
       <div id="tabReportA4" class="admin-tab-panel" style="display:none;">
         <div class="card">
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-            <button type="button" class="btn btn-primary" onclick="createReportFromSelected()">สร้างรายงานใหม่</button>
+            <button type="button" class="btn btn-primary" onclick="createReportFromSelected()">สร้างรายงานใหม่จากคิวที่จับคู่</button>
             <button type="button" class="btn btn-outline" onclick="window.print()">พิมพ์ / บันทึก PDF (A4)</button>
+            <button type="button" class="btn btn-outline" onclick="openPrintWindow()">เปิดหน้าต่างพิมพ์ใหม่</button>
             <button type="button" class="btn btn-outline" onclick="exportReportToExcel()">ส่งออกไฟล์ Excel (.xlsx)</button>
           </div>
           <div id="a4ReportPreviewArea">ยังไม่มีรายงานที่สร้างในรอบนี้</div>
         </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h3 style="margin:0;">ประวัติการออกรายงาน</h3>
+            <button type="button" class="btn btn-danger btn-sm" onclick="clearReportHistory()">ล้างประวัติรายงาน</button>
+          </div>
+          <div id="reportHistoryList"></div>
+        </div>
       </div>
 
-      <!-- TAB 4: LOCATIONS & HOUSES -->
+      <!-- TAB 4 -->
       <div id="tabLocationsHouses" class="admin-tab-panel" style="display:none;">
         <div class="card">
-          <h3>จัดการจุดรับพัสดุ</h3>
+          <h3>จัดการสถานที่รับพัสดุ</h3>
           <form id="addLocationForm" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
             <input id="newLocationNameInput" placeholder="ชื่อจุดรับพัสดุใหม่" style="max-width:280px;" required />
             <label style="display:inline-flex; align-items:center; gap:6px; margin:0;">
@@ -306,13 +383,16 @@
         </div>
 
         <div class="card">
-          <h3>สร้างช่วงบ้านเลขที่อัตโนมัติ</h3>
-          <form id="generateHousesForm" class="form-grid">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <h3 style="margin:0;">สร้างช่วงบ้านเลขที่อัตโนมัติ (House Generator)</h3>
+            <button type="button" class="btn btn-danger btn-sm" onclick="clearAllHouses()">ล้างบ้านเลขที่ทั้งหมด</button>
+          </div>
+          <form id="generateHousesForm" class="form-grid" style="margin-top:12px;">
             <div><label>คำนำหน้า</label><input id="genHousePrefix" value="62/" /></div>
             <div><label>เลขเริ่มต้น</label><input id="genHouseStart" type="number" value="1" required /></div>
             <div><label>เลขสิ้นสุด</label><input id="genHouseEnd" type="number" value="20" required /></div>
-            <div><label>เติมเลข 0 ข้างหน้า (หลัก)</label><input id="genHousePad" type="number" value="0" min="0" max="5" /></div>
-            <div><label>เลขยกเว้น (คั่นด้วยลูกน้ำ)</label><input id="genHouseExclude" placeholder="เช่น 4, 13" /></div>
+            <div><label>จำนวนหลัก (Padding 0)</label><input id="genHousePad" type="number" value="0" min="0" max="5" /></div>
+            <div><label>เลขยกเว้น (เช่น 4, 13, 24)</label><input id="genHouseExclude" placeholder="4, 13, 24" /></div>
             <div style="display:flex; align-items:flex-end;">
               <button type="submit" class="btn btn-primary">สร้างบ้านเลขที่</button>
             </div>
@@ -321,39 +401,211 @@
         </div>
       </div>
 
-      <!-- TAB 5: SETTINGS & CLOUD SYNC -->
-      <div id="tabSettings" class="admin-tab-panel" style="display:none;">
+      <!-- TAB 5 -->
+      <div id="tabAnnouncementsAdmins" class="admin-tab-panel" style="display:none;">
         <div class="card">
-          <h3>ตั้งค่าการเชื่อมต่อ Google Sheets (ทำงานหลายเครื่องพร้อมกัน)</h3>
-          <form id="adminSettingsForm">
-            <div style="margin-bottom:12px;">
-              <label for="settingCloudSyncUrl">URL ของ Google Apps Script Web App</label>
-              <input id="settingCloudSyncUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+          <h3>จัดการภาพสไลด์โชว์ประกาศหน้าบ้าน</h3>
+          <form id="addSlideForm" class="form-grid" style="margin-bottom:12px;">
+            <div><label>หัวข้อประกาศสไลด์ *</label><input id="slideTitleInput" required /></div>
+            <div><label>รายละเอียดสไลด์</label><input id="slideSubtitleInput" /></div>
+            <div><label>ลิงก์รูปภาพ (URL)</label><input id="slideImageUrlInput" placeholder="https://..." /></div>
+            <div><label>หรืออัปโหลดรูปภาพจากเครื่อง</label><input type="file" id="slideImageFileInput" accept="image/*" /></div>
+            <div style="display:flex; align-items:flex-end;"><button type="submit" class="btn btn-primary">เพิ่มภาพสไลด์ประกาศ</button></div>
+          </form>
+          <div id="slidesManageList"></div>
+        </div>
+
+        <div class="card">
+          <h3>จัดการข้อความแถบประกาศวิ่ง (Ticker)</h3>
+          <form id="addTickerForm" style="display:flex; gap:8px; margin-bottom:10px;">
+            <input id="newTickerTextInput" placeholder="พิมพ์ข้อความประกาศใหม่..." required />
+            <button type="submit" class="btn btn-primary">เพิ่มประกาศ</button>
+          </form>
+          <ul id="tickersManageList"></ul>
+        </div>
+
+        <div class="card">
+          <h3>จัดการบัญชีผู้ดูแลระบบ (Admin Accounts)</h3>
+          <form id="addAdminAccountForm" class="form-grid" style="margin-bottom:12px;">
+            <div><label>ชื่อผู้ใช้ใหม่</label><input id="newAdminUser" required /></div>
+            <div><label>รหัสผ่านใหม่</label><input id="newAdminPass" type="password" required /></div>
+            <div><label>ชื่อเรียกเจ้าหน้าที่</label><input id="newAdminDisplay" /></div>
+            <div style="display:flex; align-items:flex-end;"><button type="submit" class="btn btn-primary">เพิ่มบัญชีแอดมิน</button></div>
+          </form>
+          <ul id="adminAccountsList"></ul>
+        </div>
+      </div>
+
+      <!-- TAB 6 -->
+      <div id="tabBackupDelete" class="admin-tab-panel" style="display:none;">
+        <div class="card">
+          <h3>สำรองและกู้คืนข้อมูลระบบ (Backup / Restore)</h3>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+            <button type="button" class="btn btn-primary" onclick="exportBackupJson()">ดาวน์โหลดไฟล์สำรองข้อมูล (.json)</button>
+            <label class="btn btn-outline" style="margin:0; cursor:pointer;">
+              เลือกไฟล์สำรองเพื่อกู้คืน (.json)
+              <input type="file" id="restoreBackupJsonInput" accept=".json" style="display:none;" />
+            </label>
+          </div>
+          <hr style="border:none; border-top:1px solid var(--border); margin:16px 0;" />
+          <h4 style="color:var(--danger); margin:0 0 8px;">ล้างข้อมูลธุรกรรม (Reset)</h4>
+          <button type="button" class="btn btn-danger" onclick="resetTransactionsOnly()">ล้างเฉพาะคำขอและพัสดุทั้งหมด</button>
+        </div>
+      </div>
+
+      <!-- TAB 7: COMPREHENSIVE SETTINGS -->
+      <div id="tabSettings" class="admin-tab-panel" style="display:none;">
+        <form id="adminSettingsForm">
+
+          <!-- 7.1 ข้อมูลโครงการและหน้าตาหน้าลูกบ้าน -->
+          <div class="card">
+            <h3>7.1 ข้อมูลโครงการ & หน้าตาหน้าลูกบ้าน (User Portal)</h3>
+            <div class="form-grid">
+              <div>
+                <label for="settingProjectName">ชื่อโครงการ / นิติบุคคล</label>
+                <input id="settingProjectName" />
+              </div>
+              <div>
+                <label for="settingHeaderTitle">หัวข้อหลักแถบด้านบน</label>
+                <input id="settingHeaderTitle" />
+              </div>
+              <div>
+                <label for="settingUserFormHeading">หัวข้อฟอร์มแจ้งรับพัสดุ</label>
+                <input id="settingUserFormHeading" />
+              </div>
+              <div>
+                <label for="settingUserFormSubtitle">คำอธิบายใต้หัวข้อฟอร์ม</label>
+                <input id="settingUserFormSubtitle" />
+              </div>
             </div>
-            <div class="form-grid" style="margin-bottom:12px;">
+
+            <div class="form-grid" style="margin-top:12px;">
+              <div class="check-row">
+                <input type="checkbox" id="settingShowSlideshow" />
+                <label for="settingShowSlideshow">แสดงสไลด์โชว์ภาพประกาศหน้าลูกบ้าน</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="settingShowTicker" />
+                <label for="settingShowTicker">แสดงแถบประกาศวิ่งหน้าลูกบ้าน</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="settingShowPhoneField" />
+                <label for="settingShowPhoneField">อนุญาตให้แสดงช่องกรอกเบอร์เฉพาะจุดรับที่บังคับ</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="settingShowNoteField" />
+                <label for="settingShowNoteField">แสดงช่องหมายเหตุเพิ่มเติมในฟอร์ม</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="settingShowLatestBox" />
+                <label for="settingShowLatestBox">แสดงกล่องสรุปคำขอล่าสุดหลังบันทึก</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 7.2 การจัดรูปแบบบ้านเลขที่และระบบจับคู่ -->
+          <div class="card">
+            <h3>7.2 การจัดรูปแบบบ้านเลขที่ & กติกาการจับคู่พัสดุ</h3>
+            <div class="form-grid">
               <div>
                 <label for="settingProjectPrefix">คำนำหน้าบ้านเลขที่เริ่มต้น</label>
                 <input id="settingProjectPrefix" value="62/" />
               </div>
               <div>
-                <label for="settingSyncSec">ความถี่ดึงข้อมูลอัตโนมัติ (วินาที)</label>
-                <input id="settingSyncSec" type="number" min="5" max="120" value="10" />
+                <label for="settingDefaultLocationId">จุดรับพัสดุเริ่มต้นในฟอร์ม</label>
+                <select id="settingDefaultLocationId"></select>
+              </div>
+              <div>
+                <label for="settingCaseInsensitiveMatch">การเทียบตัวอักษรบ้านเลขที่</label>
+                <select id="settingCaseInsensitiveMatch">
+                  <option value="true">ไม่สนใจตัวพิมพ์เล็ก-ใหญ่ (แนะนำ)</option>
+                  <option value="false">ตรงตัวอักษรทุกตัว</option>
+                </select>
               </div>
             </div>
-            <button type="submit" class="btn btn-primary">บันทึกการตั้งค่า & ซิงค์ทันที</button>
-          </form>
-        </div>
-
-        <div class="card">
-          <h3>สำรองและกู้คืนข้อมูล (JSON)</h3>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button type="button" class="btn btn-outline" onclick="exportBackupJson()">ดาวน์โหลดไฟล์สำรอง (.json)</button>
-            <label class="btn btn-outline" style="margin:0; cursor:pointer;">
-              กู้คืนข้อมูลจากไฟล์ (.json)
-              <input type="file" id="restoreBackupJsonInput" accept=".json" style="display:none;" />
-            </label>
+            <div class="form-grid" style="margin-top:10px;">
+              <div class="check-row">
+                <input type="checkbox" id="settingAutoFormatHouse" />
+                <label for="settingAutoFormatHouse">จัดรูปแบบบ้านเลขที่อัตโนมัติเมื่อออกจากช่องกรอก</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="settingAutoMatchEnabled" />
+                <label for="settingAutoMatchEnabled">เปิดระบบจับคู่พัสดุกับคำขออัตโนมัติ</label>
+              </div>
+            </div>
           </div>
-        </div>
+
+          <!-- 7.3 การตัดรอบอัตโนมัติ (Auto-Clear) -->
+          <div class="card">
+            <h3>7.3 ตั้งเวลาตัดรอบอัตโนมัติประจำวัน (Auto-Clear)</h3>
+            <div class="form-grid">
+              <div>
+                <label for="settingAutoClearParcels">เวลาล้างพัสดุประจำวัน</label>
+                <input id="settingAutoClearParcels" type="time" value="19:00" />
+              </div>
+              <div>
+                <label for="settingAutoClearMatched">เวลาล้างคำขอที่จับคู่แล้ว</label>
+                <input id="settingAutoClearMatched" type="time" value="21:00" />
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:10px;">
+              <div class="check-row">
+                <input type="checkbox" id="settingEnableAutoClearParcels" />
+                <label for="settingEnableAutoClearParcels">เปิดตัดรอบพัสดุประจำวันอัตโนมัติตามเวลา</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="settingEnableAutoClearMatched" />
+                <label for="settingEnableAutoClearMatched">เปิดตัดรอบคำขอที่จับคู่แล้วอัตโนมัติตามเวลา</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 7.4 การเชื่อมต่อ Google Sheets Cloud & Telegram -->
+          <div class="card">
+            <h3>7.4 เชื่อมต่อ Google Sheets (ซิงค์หลายเครื่อง) & การแจ้งเตือน Telegram</h3>
+            <div class="form-grid">
+              <div>
+                <label for="settingCloudSyncUrl">URL ของ Google Apps Script Web App</label>
+                <input id="settingCloudSyncUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+              </div>
+              <div>
+                <label for="settingSyncSec">ความถี่ดึงข้อมูลอัตโนมัติ (วินาที)</label>
+                <input id="settingSyncSec" type="number" min="5" max="300" value="10" />
+              </div>
+              <div>
+                <label for="settingTelegramToken">Telegram Bot Token (ถ้ามี)</label>
+                <input id="settingTelegramToken" placeholder="123456:ABC-DEF..." />
+              </div>
+              <div>
+                <label for="settingTelegramChatId">Telegram Chat ID (ถ้ามี)</label>
+                <input id="settingTelegramChatId" placeholder="-1001234567890" />
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top:10px;">
+              <div class="check-row">
+                <input type="checkbox" id="settingAutoSyncOnLoad" />
+                <label for="settingAutoSyncOnLoad">ดึงข้อมูลจาก Cloud ทันทีเมื่อเปิดหน้าเว็บ</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="settingNotifyTelegramOnReq" />
+                <label for="settingNotifyTelegramOnReq">ส่งแจ้งเตือน Telegram เมื่อมีคำขอใหม่</label>
+              </div>
+            </div>
+
+            <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline btn-sm" onclick="testTelegramAlert()">ทดสอบส่งข้อความ Telegram</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="manualSyncNow()">ทดสอบซิงค์ Google Sheets ทันที</button>
+            </div>
+          </div>
+
+          <!-- ปุ่มบันทึกและรีเซ็ตการตั้งค่า -->
+          <div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <button type="button" class="btn btn-danger" onclick="resetDefaultSettings()">คืนค่าการตั้งค่าเริ่มต้น</button>
+            <button type="submit" class="btn btn-primary">บันทึกการตั้งค่าทั้งหมด & ซิงค์ทันที</button>
+          </div>
+
+        </form>
       </div>
 
     </div>
@@ -362,15 +614,17 @@
 
 <script>
 /* =========================================================
-   1. STATE, STORAGE & CLOUD SYNC CONFIG
+   1. STATE, STORAGE & FULL SETTINGS MODEL
    ========================================================= */
-const STORAGE_KEY = 'PARCEL_SYSTEM_STATE_V2';
-const DEFAULT_CLOUD_URL = ''; // สามารถวาง URL Google Apps Script Web App ตรงนี้เพื่อให้ทุกเครื่องเชื่อมอัตโนมัติ
+const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V5';
+const DEFAULT_CLOUD_URL = '';
 
 const defaultState = {
   isAdminLoggedIn: false,
-  adminUser: 'admin',
-  adminPass: '1234',
+  currentAdminUser: '',
+  adminAccounts: [
+    { id: 'adm-1', username: 'admin', password: '1234', displayName: 'ผู้ดูแลระบบหลัก' }
+  ],
   filterMode: 'all',
   customStartDate: '',
   customEndDate: '',
@@ -389,18 +643,45 @@ const defaultState = {
   ],
   slides: [
     {
-      title: 'ระบบแจ้งรับพัสดุนิติบุคคล',
-      subtitle: 'กรอกบ้านเลขที่และจุดรับพัสดุได้ทันที ข้อมูลซิงค์ถึงเจ้าหน้าที่อัตโนมัติ'
+      id: 'sld-1',
+      title: 'ประกาศนิติบุคคล: ระบบแจ้งรับพัสดุ',
+      subtitle: 'กรอกบ้านเลขที่และเลือกจุดรับพัสดุได้ทันที ข้อมูลซิงค์ถึงเจ้าหน้าที่อัตโนมัติ',
+      imageUrl: ''
     },
     {
-      title: 'ตรวจสอบและรับพัสดุสะดวก รวดเร็ว',
-      subtitle: 'รองรับจุดรับหน้าห้องนิติบุคคล ตู้จดหมาย และตู้ HIVE BOX'
+      id: 'sld-2',
+      title: 'การรับพัสดุและฝากตู้ HIVE BOX',
+      subtitle: 'จุดรับที่บังคับเบอร์โทรจะมีช่องกรอกเบอร์แสดงให้อัตโนมัติ',
+      imageUrl: ''
     }
   ],
   settings: {
+    projectName: 'นิติบุคคลอาคารชุด / หมู่บ้าน',
+    headerTitle: 'ระบบแจ้งรับและจัดการพัสดุนิติบุคคล',
+    userFormHeading: 'แบบฟอร์มแจ้งขอรับพัสดุ',
+    userFormSubtitle: '',
+    showSlideshow: true,
+    showTicker: true,
+    showPhoneField: true,
+    showNoteField: true,
+    showLatestBox: true,
     projectPrefix: '62/',
+    defaultLocationId: '',
+    autoFormatHouse: true,
+    autoMatchEnabled: true,
+    caseInsensitiveMatch: true,
+    enableAutoClearParcels: true,
+    enableAutoClearMatched: true,
+    autoClearParcelsTime: '19:00',
+    autoClearMatchedTime: '21:00',
+    lastAutoClearParcelDate: '',
+    lastAutoClearMatchedDate: '',
     cloudSyncUrl: DEFAULT_CLOUD_URL,
-    syncIntervalSec: 10
+    syncIntervalSec: 10,
+    autoSyncOnLoad: true,
+    telegramToken: '',
+    telegramChatId: '',
+    notifyTelegramOnReq: false
   }
 };
 
@@ -417,16 +698,19 @@ function loadState() {
     return {
       ...base,
       ...parsed,
+      adminAccounts: Array.isArray(parsed.adminAccounts) && parsed.adminAccounts.length ? parsed.adminAccounts : base.adminAccounts,
       locations: Array.isArray(parsed.locations) && parsed.locations.length ? parsed.locations : base.locations,
       houses: Array.isArray(parsed.houses) ? parsed.houses : base.houses,
       parcels: Array.isArray(parsed.parcels) ? parsed.parcels : [],
       requests: Array.isArray(parsed.requests) ? parsed.requests : [],
       reportHistory: Array.isArray(parsed.reportHistory) ? parsed.reportHistory : [],
       announcements: Array.isArray(parsed.announcements) ? parsed.announcements : base.announcements,
-      slides: Array.isArray(parsed.slides) ? parsed.slides : base.slides,
+      slides: Array.isArray(parsed.slides) && parsed.slides.length ? parsed.slides : base.slides,
       settings: {
         ...base.settings,
         ...(parsed.settings || {}),
+        showSlideshow: parsed.settings && typeof parsed.settings.showSlideshow === 'boolean' ? parsed.settings.showSlideshow : true,
+        showNoteField: parsed.settings && typeof parsed.settings.showNoteField === 'boolean' ? parsed.settings.showNoteField : true,
         cloudSyncUrl: (parsed.settings && parsed.settings.cloudSyncUrl) || DEFAULT_CLOUD_URL
       }
     };
@@ -450,7 +734,7 @@ function saveLocalState() {
 }
 
 /* =========================================================
-   2. CLOUD SYNC ENGINE
+   2. CLOUD SYNC & TELEGRAM HELPERS
    ========================================================= */
 function getCloudUrl() {
   return (state.settings.cloudSyncUrl || '').trim();
@@ -459,9 +743,8 @@ function getCloudUrl() {
 function updateCloudBadge(statusText) {
   const badge = document.getElementById('cloudConnectionBadge');
   if (!badge) return;
-  const url = getCloudUrl();
-  if (!url) {
-    badge.textContent = 'สถานะซิงค์: โหมดออฟไลน์ในเครื่อง (ยังไม่ตั้งค่า Cloud URL)';
+  if (!getCloudUrl()) {
+    badge.textContent = 'สถานะซิงค์: โหมดออฟไลน์ในเครื่อง (ตั้งค่า URL ได้ที่แท็บ 7. การตั้งค่า)';
     badge.style.color = '#64748b';
   } else {
     badge.textContent = statusText || 'สถานะซิงค์: เชื่อมต่อ Google Sheets Cloud แล้ว';
@@ -472,11 +755,13 @@ function updateCloudBadge(statusText) {
 function mergeRemoteState(remote) {
   if (!remote || typeof remote !== 'object') return;
   const localAuth = state.isAdminLoggedIn;
+  const localAdminUser = state.currentAdminUser;
   const localFilter = state.filterMode;
   const localStart = state.customStartDate;
   const localEnd = state.customEndDate;
   const localUrl = getCloudUrl();
 
+  if (Array.isArray(remote.adminAccounts) && remote.adminAccounts.length) state.adminAccounts = remote.adminAccounts;
   if (Array.isArray(remote.locations) && remote.locations.length) state.locations = remote.locations;
   if (Array.isArray(remote.houses) && remote.houses.length) state.houses = remote.houses;
   if (Array.isArray(remote.parcels)) state.parcels = remote.parcels;
@@ -485,15 +770,23 @@ function mergeRemoteState(remote) {
   if (Array.isArray(remote.announcements) && remote.announcements.length) state.announcements = remote.announcements;
   if (Array.isArray(remote.slides) && remote.slides.length) state.slides = remote.slides;
   if (remote.settings) {
-    state.settings = { ...state.settings, ...remote.settings, cloudSyncUrl: localUrl || remote.settings.cloudSyncUrl || '' };
+    state.settings = {
+      ...state.settings,
+      ...remote.settings,
+      showSlideshow: typeof remote.settings.showSlideshow === 'boolean' ? remote.settings.showSlideshow : true,
+      showNoteField: typeof remote.settings.showNoteField === 'boolean' ? remote.settings.showNoteField : true,
+      cloudSyncUrl: localUrl || remote.settings.cloudSyncUrl || ''
+    };
   }
 
   state.isAdminLoggedIn = localAuth;
+  state.currentAdminUser = localAdminUser;
   state.filterMode = localFilter;
   state.customStartDate = localStart;
   state.customEndDate = localEnd;
 
   saveLocalState();
+  initSlideshow();
   renderAll();
 }
 
@@ -542,6 +835,7 @@ async function pushActionToCloud(payload) {
 function getCleanCloudPayloadState() {
   const copy = JSON.parse(JSON.stringify(state));
   delete copy.isAdminLoggedIn;
+  delete copy.currentAdminUser;
   delete copy.filterMode;
   delete copy.customStartDate;
   delete copy.customEndDate;
@@ -555,8 +849,35 @@ async function saveAndSyncFullState() {
   await pushActionToCloud({ action: 'SAVE_FULL_STATE', state: getCleanCloudPayloadState() });
 }
 
+async function sendTelegramMessage(text) {
+  const token = (state.settings.telegramToken || '').trim();
+  const chatId = (state.settings.telegramChatId || '').trim();
+  if (!token || !chatId) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text })
+    });
+    const data = await res.json();
+    return Boolean(data && data.ok);
+  } catch (_) {
+    return false;
+  }
+}
+
+window.testTelegramAlert = async function () {
+  const token = document.getElementById('settingTelegramToken').value.trim();
+  const chatId = document.getElementById('settingTelegramChatId').value.trim();
+  state.settings.telegramToken = token;
+  state.settings.telegramChatId = chatId;
+  saveLocalState();
+  const ok = await sendTelegramMessage(`ทดสอบแจ้งเตือนจากระบบพัสดุ: ${state.settings.projectName}`);
+  alert(ok ? 'ส่งข้อความทดสอบไปที่ Telegram สำเร็จ!' : 'ส่งไม่สำเร็จ กรุณาตรวจสอบ Bot Token และ Chat ID');
+};
+
 /* =========================================================
-   3. HELPERS & MATCHING ENGINE
+   3. HELPERS, MATCHING & AUTO-CLEAR SCHEDULER
    ========================================================= */
 const uid = (prefix = 'id') => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
@@ -596,7 +917,7 @@ function normalizeHouseNumber(rawVal) {
 }
 
 window.handleHouseAutoFormat = function (inputEl) {
-  if (!inputEl) return;
+  if (!inputEl || !state.settings.autoFormatHouse) return;
   const formatted = normalizeHouseNumber(inputEl.value);
   if (formatted) inputEl.value = formatted;
 };
@@ -605,12 +926,17 @@ function getLocationById(locId) {
   return state.locations.find(l => l.id === locId) || null;
 }
 
+function isSameHouse(h1, h2) {
+  const a = String(h1 || '').trim();
+  const b = String(h2 || '').trim();
+  return state.settings.caseInsensitiveMatch ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
 function runAutoMatching() {
+  if (!state.settings.autoMatchEnabled) return;
   for (const req of state.requests) {
     if (req.status !== 'pending') continue;
-    const matchParcel = state.parcels.find(
-      p => p.house.toLowerCase() === req.house.toLowerCase() && !p.matchedReqId
-    );
+    const matchParcel = state.parcels.find(p => isSameHouse(p.house, req.house) && !p.matchedReqId);
     if (matchParcel) {
       req.status = 'matched';
       req.matchedParcelId = matchParcel.id;
@@ -619,22 +945,88 @@ function runAutoMatching() {
   }
 }
 
+function checkAutoClearTimers() {
+  const now = new Date();
+  const todayKey = now.toISOString().slice(0, 10);
+  const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  let changed = false;
+
+  if (state.settings.enableAutoClearParcels) {
+    const pTime = state.settings.autoClearParcelsTime || '19:00';
+    if (currentHHMM >= pTime && state.settings.lastAutoClearParcelDate !== todayKey && state.parcels.length > 0) {
+      state.parcels = [];
+      state.settings.lastAutoClearParcelDate = todayKey;
+      changed = true;
+    }
+  }
+
+  if (state.settings.enableAutoClearMatched) {
+    const mTime = state.settings.autoClearMatchedTime || '21:00';
+    if (currentHHMM >= mTime && state.settings.lastAutoClearMatchedDate !== todayKey) {
+      const before = state.requests.length;
+      state.requests = state.requests.filter(r => r.status !== 'matched');
+      state.settings.lastAutoClearMatchedDate = todayKey;
+      if (state.requests.length !== before) changed = true;
+    }
+  }
+
+  if (changed) saveAndSyncFullState();
+}
+
 /* =========================================================
-   4. USER PORTAL
+   4. USER PORTAL & UI APPEARANCE
    ========================================================= */
+function applyBrandingAndVisibility() {
+  const s = state.settings;
+  const headerTitle = document.getElementById('headerSystemTitle');
+  if (headerTitle) {
+    headerTitle.textContent = s.headerTitle || `ระบบแจ้งรับและจัดการพัสดุ — ${s.projectName || ''}`;
+  }
+  const heading = document.getElementById('userFormHeading');
+  if (heading) heading.textContent = s.userFormHeading || 'แบบฟอร์มแจ้งขอรับพัสดุ';
+
+  const subtitle = document.getElementById('userFormSubtitle');
+  if (subtitle) {
+    subtitle.textContent = s.userFormSubtitle || '';
+    subtitle.style.display = s.userFormSubtitle ? 'block' : 'none';
+  }
+
+  const slideSec = document.getElementById('userSlideshowSection');
+  if (slideSec) slideSec.style.display = s.showSlideshow !== false ? 'block' : 'none';
+
+  const tickerSec = document.getElementById('userAnnouncementTickerCard');
+  if (tickerSec) tickerSec.style.display = s.showTicker !== false ? 'flex' : 'none';
+
+  const noteWrap = document.getElementById('reqNoteFieldWrap');
+  if (noteWrap) noteWrap.style.display = s.showNoteField !== false ? 'block' : 'none';
+
+  syncPhoneFieldRequirement();
+}
+
 function initSlideshow() {
   const track = document.getElementById('slideshowTrack');
   const dotsWrap = document.getElementById('slideshowDots');
   if (!track) return;
-  const slides = state.slides.length ? state.slides : defaultState.slides;
+  const slides = state.slides && state.slides.length ? state.slides : defaultState.slides;
 
-  track.innerHTML = slides.map((s, i) => `
-    <div style="min-width:100%; padding:24px; background:linear-gradient(135deg,#1d4ed8,#0f172a); color:#fff;">
-      <div style="font-size:12px; opacity:0.8;">ประกาศนิติบุคคล (${i + 1}/${slides.length})</div>
-      <h3 style="margin:6px 0 4px; font-size:20px;">${escapeHTML(s.title)}</h3>
-      <p style="margin:0; font-size:14px; opacity:0.92;">${escapeHTML(s.subtitle)}</p>
-    </div>
-  `).join('');
+  track.innerHTML = slides.map((s, i) => {
+    const safeUrl = (s.imageUrl || '').trim();
+    const bgStyle = safeUrl
+      ? `background: linear-gradient(rgba(15,23,42,0.58), rgba(15,23,42,0.78)), url('${escapeHTML(safeUrl)}') center/cover no-repeat;`
+      : `background: linear-gradient(135deg,#1e3a8a,#1d4ed8);`;
+    const imgPreviewHtml = safeUrl
+      ? `<div style="margin-top:10px;"><img src="${escapeHTML(safeUrl)}" alt="${escapeHTML(s.title)}" style="max-height:140px; max-width:100%; border-radius:8px; object-fit:cover; border:1px solid rgba(255,255,255,0.25);" onerror="this.style.display='none'" /></div>`
+      : '';
+
+    return `
+      <div style="min-width:100%; padding:24px; ${bgStyle} color:#fff;">
+        <div style="font-size:12px; opacity:0.88;">${escapeHTML(state.settings.projectName || 'ประกาศนิติบุคคล')} (${i + 1}/${slides.length})</div>
+        <h3 style="margin:6px 0 4px; font-size:20px;">${escapeHTML(s.title)}</h3>
+        <p style="margin:0; font-size:14px; opacity:0.94;">${escapeHTML(s.subtitle || '')}</p>
+        ${imgPreviewHtml}
+      </div>
+    `;
+  }).join('');
 
   if (dotsWrap) {
     dotsWrap.innerHTML = slides.map((_, i) =>
@@ -650,7 +1042,7 @@ function initSlideshow() {
 
   updateSlideTransform(slides.length);
   clearInterval(slideTimer);
-  if (slides.length > 1) {
+  if (slides.length > 1 && state.settings.showSlideshow !== false) {
     slideTimer = setInterval(() => {
       slideIndex += 1;
       updateSlideTransform(slides.length);
@@ -677,27 +1069,41 @@ function renderUserFormOptions() {
   if (datalist) {
     datalist.innerHTML = state.houses.map(h => `<option value="${escapeHTML(h)}"></option>`).join('');
   }
-  const locSelect = document.getElementById('reqLocationSelect');
-  if (locSelect) {
-    const prev = locSelect.value;
-    locSelect.innerHTML = `<option value="">-- เลือกจุดรับพัสดุ --</option>` +
-      state.locations.map(l => `<option value="${escapeHTML(l.id)}">${escapeHTML(l.name)}</option>`).join('');
-    if (prev && state.locations.some(l => l.id === prev)) locSelect.value = prev;
-  }
+  const optionsHTML = `<option value="">-- เลือกจุดรับพัสดุ --</option>` +
+    state.locations.map(l => `<option value="${escapeHTML(l.id)}">${escapeHTML(l.name)}</option>`).join('');
+
+  ['reqLocationSelect', 'adminReqLocationSelect'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = optionsHTML;
+    if (prev && state.locations.some(l => l.id === prev)) {
+      sel.value = prev;
+    } else if (selId === 'reqLocationSelect' && state.settings.defaultLocationId) {
+      sel.value = state.settings.defaultLocationId;
+    }
+  });
+
   syncPhoneFieldRequirement();
 }
 
 function syncPhoneFieldRequirement() {
   const locSelect = document.getElementById('reqLocationSelect');
+  const phoneWrap = document.getElementById('reqPhoneFieldWrap');
   const phoneInput = document.getElementById('reqPhoneInput');
   const phoneStar = document.getElementById('phoneRequiredStar');
   if (!locSelect || !phoneInput) return;
 
   const loc = getLocationById(locSelect.value);
-  const required = Boolean(loc && loc.requirePhone);
+  const required = Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false);
   phoneInput.required = required;
-  phoneInput.placeholder = required ? 'กรอกเบอร์โทรศัพท์ (จำเป็นสำหรับจุดรับนี้)' : 'เบอร์โทรศัพท์ (ถ้ามี)';
+  phoneInput.placeholder = required ? 'กรอกเบอร์โทรศัพท์ (จำเป็นสำหรับจุดรับนี้)' : '';
   if (phoneStar) phoneStar.style.display = required ? 'inline' : 'none';
+  if (phoneWrap) {
+    // แสดงช่องกรอกเบอร์เฉพาะจุดรับที่บังคับกรอกเบอร์โทร
+    phoneWrap.style.display = required ? 'block' : 'none';
+    if (!required) phoneInput.value = '';
+  }
 }
 
 function renderAnnouncementTicker() {
@@ -715,6 +1121,10 @@ function showLatestRequestBox(reqObj, locObj, syncedToCloud) {
   const contentEl = document.getElementById('latestRequestContent');
   const syncEl = document.getElementById('latestRequestSyncStatus');
   if (!blueBox || !contentEl) return;
+  if (!state.settings.showLatestBox) {
+    blueBox.style.display = 'none';
+    return;
+  }
 
   const statusText = reqObj.status === 'matched'
     ? 'จับคู่พัสดุในระบบแล้ว (พร้อมจ่าย)'
@@ -750,13 +1160,16 @@ function bindUserRequestForm() {
     e.preventDefault();
     const house = normalizeHouseNumber(document.getElementById('reqHouseInput')?.value || '');
     const locationId = document.getElementById('reqLocationSelect')?.value || '';
-    const phone = (document.getElementById('reqPhoneInput')?.value || '').trim();
-    const note = (document.getElementById('reqNoteInput')?.value || '').trim();
     const loc = getLocationById(locationId);
+    const phoneRequired = Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false);
+    const phone = phoneRequired ? (document.getElementById('reqPhoneInput')?.value || '').trim() : '';
+    const note = state.settings.showNoteField ? (document.getElementById('reqNoteInput')?.value || '').trim() : '';
 
     if (!house) return alert('กรุณากรอกบ้านเลขที่ / ห้องชุด');
     if (!locationId || !loc) return alert('กรุณาเลือกจุดรับพัสดุ');
-    if (loc.requirePhone && !phone) return alert(`กรุณากรอกเบอร์โทรศัพท์สำหรับจุดรับ "${loc.name}"`);
+    if (phoneRequired && !phone) {
+      return alert(`กรุณากรอกเบอร์โทรศัพท์สำหรับจุดรับ "${loc.name}"`);
+    }
 
     const reqItem = {
       id: uid('req'),
@@ -778,14 +1191,74 @@ function bindUserRequestForm() {
     const latest = state.requests.find(r => r.id === reqItem.id) || reqItem;
     showLatestRequestBox(latest, loc, synced);
 
+    if (state.settings.notifyTelegramOnReq) {
+      await sendTelegramMessage(
+        `📦 คำขอรับพัสดุใหม่
+บ้านเลขที่: ${latest.house}
+จุดรับ: ${loc.name}
+สถานะ: ${latest.status}` +
+        `${latest.phone ? `
+โทร: ${latest.phone}` : ''}${latest.note ? `
+หมายเหตุ: ${latest.note}` : ''}`
+      );
+    }
+
     form.reset();
+    renderUserFormOptions();
     syncPhoneFieldRequirement();
   });
 }
 
 /* =========================================================
-   5. ADMIN PORTAL
+   5. ADMIN PORTAL & SETTINGS HANDLERS
    ========================================================= */
+function populateSettingsForm() {
+  const s = state.settings;
+  document.getElementById('settingProjectName').value = s.projectName || '';
+  document.getElementById('settingHeaderTitle').value = s.headerTitle || '';
+  document.getElementById('settingUserFormHeading').value = s.userFormHeading || '';
+  document.getElementById('settingUserFormSubtitle').value = s.userFormSubtitle || '';
+
+  document.getElementById('settingShowSlideshow').checked = s.showSlideshow !== false;
+  document.getElementById('settingShowTicker').checked = s.showTicker !== false;
+  document.getElementById('settingShowPhoneField').checked = s.showPhoneField !== false;
+  document.getElementById('settingShowNoteField').checked = Boolean(s.showNoteField);
+  document.getElementById('settingShowLatestBox').checked = Boolean(s.showLatestBox);
+
+  document.getElementById('settingProjectPrefix').value = s.projectPrefix || '62/';
+  const defLocSel = document.getElementById('settingDefaultLocationId');
+  defLocSel.innerHTML = `<option value="">-- ไม่ระบุ (ให้ลูกบ้านเลือกเอง) --</option>` +
+    state.locations.map(l => `<option value="${escapeHTML(l.id)}">${escapeHTML(l.name)}</option>`).join('');
+  defLocSel.value = s.defaultLocationId || '';
+
+  document.getElementById('settingCaseInsensitiveMatch').value = String(Boolean(s.caseInsensitiveMatch));
+  document.getElementById('settingAutoFormatHouse').checked = Boolean(s.autoFormatHouse);
+  document.getElementById('settingAutoMatchEnabled').checked = Boolean(s.autoMatchEnabled);
+
+  document.getElementById('settingAutoClearParcels').value = s.autoClearParcelsTime || '19:00';
+  document.getElementById('settingAutoClearMatched').value = s.autoClearMatchedTime || '21:00';
+  document.getElementById('settingEnableAutoClearParcels').checked = Boolean(s.enableAutoClearParcels);
+  document.getElementById('settingEnableAutoClearMatched').checked = Boolean(s.enableAutoClearMatched);
+
+  document.getElementById('settingCloudSyncUrl').value = s.cloudSyncUrl || '';
+  document.getElementById('settingSyncSec').value = s.syncIntervalSec || 10;
+  document.getElementById('settingTelegramToken').value = s.telegramToken || '';
+  document.getElementById('settingTelegramChatId').value = s.telegramChatId || '';
+  document.getElementById('settingAutoSyncOnLoad').checked = Boolean(s.autoSyncOnLoad);
+  document.getElementById('settingNotifyTelegramOnReq').checked = Boolean(s.notifyTelegramOnReq);
+}
+
+window.resetDefaultSettings = async function () {
+  if (!confirm('ยืนยันคืนค่าการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น?')) return;
+  const keepUrl = state.settings.cloudSyncUrl;
+  state.settings = { ...cloneDefault().settings, cloudSyncUrl: keepUrl };
+  populateSettingsForm();
+  applyBrandingAndVisibility();
+  initSlideshow();
+  await saveAndSyncFullState();
+  alert('คืนค่าการตั้งค่าเริ่มต้นเรียบร้อย');
+};
+
 function bindNavigationAndAdmin() {
   const btnUser = document.getElementById('btnShowUserPortal');
   const btnAdmin = document.getElementById('btnShowAdminPortal');
@@ -797,6 +1270,7 @@ function bindNavigationAndAdmin() {
     btnAdmin.classList.remove('active');
     secUser.style.display = 'block';
     secAdmin.style.display = 'none';
+    initSlideshow();
   });
 
   btnAdmin.addEventListener('click', async () => {
@@ -804,18 +1278,20 @@ function bindNavigationAndAdmin() {
     btnUser.classList.remove('active');
     secUser.style.display = 'none';
     secAdmin.style.display = 'block';
-    await pullFromCloud(true);
+    if (state.settings.autoSyncOnLoad) await pullFromCloud(true);
   });
 
   document.getElementById('adminLoginForm').addEventListener('submit', async e => {
     e.preventDefault();
     const u = document.getElementById('adminUsernameInput').value.trim();
     const p = document.getElementById('adminPasswordInput').value.trim();
-    if (u === state.adminUser && p === state.adminPass) {
+    const acc = state.adminAccounts.find(a => a.username === u && a.password === p);
+    if (acc) {
       state.isAdminLoggedIn = true;
+      state.currentAdminUser = acc.username;
       saveLocalState();
       renderAdminVisibility();
-      await pullFromCloud(true);
+      if (state.settings.autoSyncOnLoad) await pullFromCloud(true);
       renderAll();
     } else {
       alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
@@ -824,6 +1300,7 @@ function bindNavigationAndAdmin() {
 
   document.getElementById('adminLogoutBtn').addEventListener('click', () => {
     state.isAdminLoggedIn = false;
+    state.currentAdminUser = '';
     saveLocalState();
     renderAdminVisibility();
   });
@@ -873,7 +1350,6 @@ function bindNavigationAndAdmin() {
     saveLocalState();
     renderAll();
     e.target.reset();
-
     await pushActionToCloud({ action: 'ADD_PARCEL', parcel: parcelItem });
   });
 
@@ -886,14 +1362,14 @@ function bindNavigationAndAdmin() {
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
       let count = 0;
       for (const r of rows) {
-        const h = r.house || r.บ้านเลขที่ || r.ห้อง || '';
+        const h = r.house || r['บ้านเลขที่'] || r['ห้อง'] || '';
         if (!String(h).trim()) continue;
         state.parcels.unshift({
           id: uid('pcl'),
           house: normalizeHouseNumber(h),
-          courier: String(r.courier || r.ขนส่ง || 'พัสดุทั่วไป').trim(),
-          tracking: String(r.tracking || r.เลขพัสดุ || '').trim(),
-          note: String(r.note || r.หมายเหตุ || '').trim(),
+          courier: String(r.courier || r['ขนส่ง'] || 'พัสดุทั่วไป').trim(),
+          tracking: String(r.tracking || r['เลขพัสดุ'] || '').trim(),
+          note: String(r.note || r['หมายเหตุ'] || '').trim(),
           matchedReqId: null,
           createdAt: new Date().toISOString()
         });
@@ -901,6 +1377,57 @@ function bindNavigationAndAdmin() {
       }
       await saveAndSyncFullState();
       alert(`นำเข้าพัสดุสำเร็จ ${count} รายการ`);
+      e.target.value = '';
+    };
+    reader.readAsBinaryString(file);
+  });
+
+  document.getElementById('adminAddRequestForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const house = normalizeHouseNumber(document.getElementById('adminReqHouseInput').value);
+    const locationId = document.getElementById('adminReqLocationSelect').value;
+    const phone = document.getElementById('adminReqPhoneInput').value.trim();
+    const note = document.getElementById('adminReqNoteInput').value.trim();
+    if (!house || !locationId) return alert('กรุณากรอกบ้านเลขที่และจุดรับ');
+
+    const reqItem = {
+      id: uid('req'), house, locationId, phone, note, status: 'pending', matchedParcelId: null, createdAt: new Date().toISOString()
+    };
+    state.requests.unshift(reqItem);
+    runAutoMatching();
+    saveLocalState();
+    renderAll();
+    e.target.reset();
+    await pushActionToCloud({ action: 'ADD_REQUEST', request: reqItem });
+  });
+
+  document.getElementById('importRequestsExcelInput').addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (!file || typeof XLSX === 'undefined') return;
+    const reader = new FileReader();
+    reader.onload = async evt => {
+      const wb = XLSX.read(evt.target.result, { type: 'binary' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      let count = 0;
+      for (const r of rows) {
+        const h = r.house || r['บ้านเลขที่'] || '';
+        if (!String(h).trim()) continue;
+        const locName = String(r.location || r['จุดรับ'] || '').trim();
+        const locObj = state.locations.find(l => l.name.includes(locName)) || state.locations[0];
+        state.requests.unshift({
+          id: uid('req'),
+          house: normalizeHouseNumber(h),
+          locationId: locObj ? locObj.id : '',
+          phone: String(r.phone || r['เบอร์โทร'] || '').trim(),
+          note: String(r.note || r['หมายเหตุ'] || '').trim(),
+          status: 'pending',
+          matchedParcelId: null,
+          createdAt: new Date().toISOString()
+        });
+        count += 1;
+      }
+      await saveAndSyncFullState();
+      alert(`นำเข้าคำขอสำเร็จ ${count} รายการ`);
       e.target.value = '';
     };
     reader.readAsBinaryString(file);
@@ -941,16 +1468,48 @@ function bindNavigationAndAdmin() {
     await saveAndSyncFullState();
   });
 
-  document.getElementById('adminSettingsForm').addEventListener('submit', async e => {
+  document.getElementById('addSlideForm').addEventListener('submit', async e => {
     e.preventDefault();
-    state.settings.cloudSyncUrl = document.getElementById('settingCloudSyncUrl').value.trim();
-    state.settings.projectPrefix = document.getElementById('settingProjectPrefix').value.trim() || '62/';
-    state.settings.syncIntervalSec = Math.max(5, Number(document.getElementById('settingSyncSec').value) || 10);
-    saveLocalState();
-    startCloudPolling();
-    const ok = await pullFromCloud(false);
-    updateCloudBadge();
-    alert(ok ? 'บันทึกการตั้งค่าและเชื่อมต่อ Cloud สำเร็จ!' : 'บันทึกการตั้งค่าแล้ว (หากใส่ URL โปรดตรวจสอบสิทธิ์ Anyone)');
+    const title = document.getElementById('slideTitleInput').value.trim();
+    const subtitle = document.getElementById('slideSubtitleInput').value.trim();
+    const urlVal = document.getElementById('slideImageUrlInput').value.trim();
+    const file = document.getElementById('slideImageFileInput').files?.[0];
+
+    const finalizeSlide = async imgSrc => {
+      state.slides.push({ id: uid('sld'), title, subtitle, imageUrl: imgSrc });
+      e.target.reset();
+      initSlideshow();
+      await saveAndSyncFullState();
+    };
+
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = evt => finalizeSlide(evt.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      await finalizeSlide(urlVal);
+    }
+  });
+
+  document.getElementById('addTickerForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const txt = document.getElementById('newTickerTextInput').value.trim();
+    if (!txt) return;
+    state.announcements.push(txt);
+    e.target.reset();
+    await saveAndSyncFullState();
+  });
+
+  document.getElementById('addAdminAccountForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const username = document.getElementById('newAdminUser').value.trim();
+    const password = document.getElementById('newAdminPass').value.trim();
+    const displayName = document.getElementById('newAdminDisplay').value.trim() || username;
+    if (!username || !password) return;
+    if (state.adminAccounts.some(a => a.username === username)) return alert('มีชื่อผู้ใช้นี้แล้ว');
+    state.adminAccounts.push({ id: uid('adm'), username, password, displayName });
+    e.target.reset();
+    await saveAndSyncFullState();
   });
 
   document.getElementById('restoreBackupJsonInput').addEventListener('change', e => {
@@ -970,14 +1529,50 @@ function bindNavigationAndAdmin() {
     };
     reader.readAsText(file);
   });
+
+  document.getElementById('adminSettingsForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    state.settings.projectName = document.getElementById('settingProjectName').value.trim() || 'นิติบุคคล';
+    state.settings.headerTitle = document.getElementById('settingHeaderTitle').value.trim() || 'ระบบแจ้งรับและจัดการพัสดุนิติบุคคล';
+    state.settings.userFormHeading = document.getElementById('settingUserFormHeading').value.trim() || 'แบบฟอร์มแจ้งขอรับพัสดุ';
+    state.settings.userFormSubtitle = document.getElementById('settingUserFormSubtitle').value.trim();
+
+    state.settings.showSlideshow = document.getElementById('settingShowSlideshow').checked;
+    state.settings.showTicker = document.getElementById('settingShowTicker').checked;
+    state.settings.showPhoneField = document.getElementById('settingShowPhoneField').checked;
+    state.settings.showNoteField = document.getElementById('settingShowNoteField').checked;
+    state.settings.showLatestBox = document.getElementById('settingShowLatestBox').checked;
+
+    state.settings.projectPrefix = document.getElementById('settingProjectPrefix').value.trim() || '62/';
+    state.settings.defaultLocationId = document.getElementById('settingDefaultLocationId').value || '';
+    state.settings.caseInsensitiveMatch = document.getElementById('settingCaseInsensitiveMatch').value === 'true';
+    state.settings.autoFormatHouse = document.getElementById('settingAutoFormatHouse').checked;
+    state.settings.autoMatchEnabled = document.getElementById('settingAutoMatchEnabled').checked;
+
+    state.settings.autoClearParcelsTime = document.getElementById('settingAutoClearParcels').value || '19:00';
+    state.settings.autoClearMatchedTime = document.getElementById('settingAutoClearMatched').value || '21:00';
+    state.settings.enableAutoClearParcels = document.getElementById('settingEnableAutoClearParcels').checked;
+    state.settings.enableAutoClearMatched = document.getElementById('settingEnableAutoClearMatched').checked;
+
+    state.settings.cloudSyncUrl = document.getElementById('settingCloudSyncUrl').value.trim();
+    state.settings.syncIntervalSec = Math.max(5, Number(document.getElementById('settingSyncSec').value) || 10);
+    state.settings.telegramToken = document.getElementById('settingTelegramToken').value.trim();
+    state.settings.telegramChatId = document.getElementById('settingTelegramChatId').value.trim();
+    state.settings.autoSyncOnLoad = document.getElementById('settingAutoSyncOnLoad').checked;
+    state.settings.notifyTelegramOnReq = document.getElementById('settingNotifyTelegramOnReq').checked;
+
+    applyBrandingAndVisibility();
+    initSlideshow();
+    startCloudPolling();
+    await saveAndSyncFullState();
+    alert('บันทึกการตั้งค่าทั้งหมดเรียบร้อยแล้ว!');
+  });
 }
 
 function renderAdminVisibility() {
   document.getElementById('adminLoginGate').style.display = state.isAdminLoggedIn ? 'none' : 'block';
   document.getElementById('adminDashboardWrap').style.display = state.isAdminLoggedIn ? 'block' : 'none';
-  document.getElementById('settingCloudSyncUrl').value = state.settings.cloudSyncUrl || '';
-  document.getElementById('settingProjectPrefix').value = state.settings.projectPrefix || '62/';
-  document.getElementById('settingSyncSec').value = state.settings.syncIntervalSec || 10;
+  populateSettingsForm();
   updateCloudBadge();
 }
 
@@ -997,6 +1592,9 @@ function isWithinFilter(isoStr) {
   return true;
 }
 
+/* =========================================================
+   6. REPORTS, EXPORTS & BULK ACTIONS
+   ========================================================= */
 window.createReportFromSelected = async function () {
   const checked = [...document.querySelectorAll('.matched-house-checkbox:checked')].map(cb => cb.value);
   const targets = checked.length
@@ -1047,12 +1645,12 @@ function renderReportArea(reportObj) {
     <div style="background:#fff; padding:20px; border:1px solid #cbd5e1; border-radius:8px;">
       <h3 style="margin:0 0 6px;">${escapeHTML(reportObj.title)}</h3>
       <div style="font-size:12px; color:#64748b; margin-bottom:12px;">
-        ออกรายงานเมื่อ: ${formatDateTimeTH(reportObj.createdAt)} | จำนวน ${reportObj.count} รายการ
+        ${escapeHTML(state.settings.projectName || '')} | ออกรายงานเมื่อ: ${formatDateTimeTH(reportObj.createdAt)} | จำนวน ${reportObj.count} รายการ
       </div>
-      <table border="1" cellpadding="6" cellspacing="0" style="width:100%; border-collapse:collapse; font-size:13px;">
+      <table>
         <thead>
-          <tr style="background:#f1f5f9;">
-            <th>ลำดับ</th><th>บ้านเลขที่</th><th>จุดรับ</th><th>ขนส่ง / เลขพัสดุ</th><th>เบอร์โทร</th><th>หมายเหตุ</th>
+          <tr>
+            <th>ลำดับ</th><th>บ้านเลขที่</th><th>จุดรับ</th><th>ขนส่ง / เลขพัสดุ</th><th>เบอร์โทร</th><th>หมายเหตุ</th><th>ลายเซ็นผู้รับ</th>
           </tr>
         </thead>
         <tbody>
@@ -1064,6 +1662,7 @@ function renderReportArea(reportObj) {
               <td>${escapeHTML(r.courier)} ${r.tracking ? `(${escapeHTML(r.tracking)})` : ''}</td>
               <td>${escapeHTML(r.phone)}</td>
               <td>${escapeHTML(r.note)}</td>
+              <td style="min-width:90px;"></td>
             </tr>
           `).join('')}
         </tbody>
@@ -1071,6 +1670,14 @@ function renderReportArea(reportObj) {
     </div>
   `;
 }
+
+window.openPrintWindow = function () {
+  const html = document.getElementById('a4ReportPreviewArea')?.innerHTML || '';
+  const win = window.open('', '_blank');
+  if (!win) return alert('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป');
+  win.document.write(`<html><head><title>พิมพ์รายงาน A4</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #999;padding:6px;font-size:13px;}</style></head><body>${html}<script>window.onload=()=>window.print();<\/script></body></html>`);
+  win.document.close();
+};
 
 window.exportReportToExcel = function () {
   if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
@@ -1082,6 +1689,88 @@ window.exportReportToExcel = function () {
   XLSX.writeFile(wb, `parcel-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
 };
 
+window.downloadParcelTemplate = function () {
+  if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
+  const sample = [
+    { 'บ้านเลขที่': '62/1', 'ขนส่ง': 'Flash Express', 'เลขพัสดุ': 'TH0123456789', 'หมายเหตุ': '' },
+    { 'บ้านเลขที่': '62/2', 'ขนส่ง': 'Kerry', 'เลขพัสดุ': 'KEX987654321', 'หมายเหตุ': '' }
+  ];
+  const ws = XLSX.utils.json_to_sheet(sample);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template');
+  XLSX.writeFile(wb, 'parcel-import-template.xlsx');
+};
+
+window.exportAndClearPendingRequests = async function () {
+  const pending = state.requests.filter(r => r.status === 'pending');
+  if (!pending.length) return alert('ไม่มีคำขอที่รอพัสดุ');
+  if (typeof XLSX !== 'undefined') {
+    const rows = pending.map(r => ({
+      'บ้านเลขที่': r.house,
+      'จุดรับ': getLocationById(r.locationId)?.name || '-',
+      'เบอร์โทร': r.phone || '-',
+      'หมายเหตุ': r.note || '-',
+      'เวลาแจ้ง': formatDateTimeTH(r.createdAt)
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'PendingRequests');
+    XLSX.writeFile(wb, `pending-requests-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+  if (confirm(`ส่งออกไฟล์แล้ว ต้องการเคลียร์คำขอที่ยังไม่มีพัสดุทั้ง ${pending.length} รายการออกจากหน้าจอหรือไม่?`)) {
+    state.requests = state.requests.filter(r => r.status !== 'pending');
+    await saveAndSyncFullState();
+  }
+};
+
+window.exportAllRequestsExcel = function () {
+  if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
+  const rows = state.requests.map(r => ({
+    'บ้านเลขที่': r.house,
+    'จุดรับ': getLocationById(r.locationId)?.name || '-',
+    'สถานะ': r.status,
+    'เบอร์โทร': r.phone || '-',
+    'หมายเหตุ': r.note || '-',
+    'เวลาบันทึก': formatDateTimeTH(r.createdAt)
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'AllRequests');
+  XLSX.writeFile(wb, `all-requests-${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
+window.clearAllDailyParcels = async () => {
+  if (!confirm('ยืนยันล้างรายการพัสดุประจำวันทั้งหมด?')) return;
+  state.parcels = [];
+  state.requests.forEach(r => { if (r.status === 'matched') { r.status = 'pending'; r.matchedParcelId = null; } });
+  await saveAndSyncFullState();
+};
+
+window.clearAllMatchedRequests = async () => {
+  if (!confirm('ยืนยันลบคำขอที่จับคู่สำเร็จแล้วทั้งหมด?')) return;
+  state.requests = state.requests.filter(r => r.status !== 'matched');
+  await saveAndSyncFullState();
+};
+
+window.clearReportHistory = async () => {
+  if (!confirm('ยืนยันล้างประวัติการออกรายงานทั้งหมด?')) return;
+  state.reportHistory = [];
+  await saveAndSyncFullState();
+};
+
+window.clearAllHouses = async () => {
+  if (!confirm('ยืนยันล้างรายชื่อบ้านเลขที่ทั้งหมดในระบบ?')) return;
+  state.houses = [];
+  await saveAndSyncFullState();
+};
+
+window.resetTransactionsOnly = async () => {
+  if (!confirm('ยืนยันล้างคำขอรับพัสดุและพัสดุประจำวันทั้งหมด?')) return;
+  state.requests = [];
+  state.parcels = [];
+  await saveAndSyncFullState();
+};
+
 window.exportBackupJson = function () {
   const blob = new Blob([JSON.stringify(getCleanCloudPayloadState(), null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -1090,6 +1779,9 @@ window.exportBackupJson = function () {
   a.click();
 };
 
+/* =========================================================
+   7. RENDER ADMIN DATA
+   ========================================================= */
 function renderAdminData() {
   const visibleRequests = state.requests.filter(r => isWithinFilter(r.createdAt));
   const pendingRequests = visibleRequests.filter(r => r.status === 'pending');
@@ -1097,8 +1789,50 @@ function renderAdminData() {
 
   document.getElementById('statTotalRequests').textContent = visibleRequests.length;
   document.getElementById('statPendingRequests').textContent = pendingRequests.length;
-  document.getElementById('statParcelsCount').textContent = state.parcels.length;
   document.getElementById('statHousesCount').textContent = state.houses.length;
+  document.getElementById('statSlidesCount').textContent = state.slides.length;
+
+  const locCounts = {};
+  state.locations.forEach(l => { locCounts[l.id] = 0; });
+  visibleRequests.filter(r => r.status === 'reported').forEach(r => {
+    if (locCounts[r.locationId] !== undefined) locCounts[r.locationId] += 1;
+  });
+  document.getElementById('locationSummaryBar').innerHTML = state.locations.map(l =>
+    `<div class="loc-pill"><strong>${escapeHTML(l.name)}:</strong> ออกรายงานแล้ว ${locCounts[l.id] || 0} รายการ</div>`
+  ).join('');
+
+  document.getElementById('unmatchedRequestsList').innerHTML = pendingRequests.length
+    ? pendingRequests.map(r => {
+        const loc = getLocationById(r.locationId);
+        return `<li><strong>${escapeHTML(r.house)}</strong> — ${escapeHTML(loc ? loc.name : '-')} ${r.phone ? `(${escapeHTML(r.phone)})` : ''} ${r.note ? `[${escapeHTML(r.note)}]` : ''}</li>`;
+      }).join('')
+    : '<li style="color:#64748b;">ไม่มีคำขอที่รอพัสดุ</li>';
+
+  document.getElementById('dailyParcelsTableBody').innerHTML = state.parcels.length
+    ? state.parcels.map(p => `
+        <tr>
+          <td><strong>${escapeHTML(p.house)}</strong></td>
+          <td><span class="badge ${p.matchedReqId ? 'badge-matched' : 'badge-pending'}">${p.matchedReqId ? 'จับคู่แล้ว' : 'รอคำขอ'}</span></td>
+          <td>${escapeHTML(p.courier)}</td>
+          <td>${escapeHTML(p.tracking || '-')}</td>
+          <td>${escapeHTML(p.note || '-')}</td>
+          <td>${formatDateTimeTH(p.createdAt)}</td>
+          <td><button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteParcel('${p.id}')">ลบ</button></td>
+        </tr>
+      `).join('')
+    : '<tr><td colspan="7" style="text-align:center; color:#64748b;">ยังไม่มีพัสดุประจำวัน</td></tr>';
+
+  const grouped = {};
+  for (const r of matchedRequests) grouped[r.house] = (grouped[r.house] || 0) + 1;
+  const matchedHouses = Object.keys(grouped);
+  document.getElementById('matchedHousesList').innerHTML = matchedHouses.length
+    ? matchedHouses.map(h => `
+        <label style="display:inline-flex; align-items:center; gap:6px; margin-right:10px; padding:6px 10px; background:#eff6ff; border-radius:6px;">
+          <input type="checkbox" class="matched-house-checkbox" value="${escapeHTML(h)}" checked style="width:auto;" />
+          <span><strong>${escapeHTML(h)}</strong> (${grouped[h]})</span>
+        </label>
+      `).join('')
+    : '<span style="color:#64748b;">ยังไม่มีบ้านที่จับคู่พัสดุพร้อมออกรายงาน</span>';
 
   document.getElementById('allRequestsList').innerHTML = visibleRequests.length
     ? visibleRequests.map(r => {
@@ -1119,35 +1853,14 @@ function renderAdminData() {
       }).join('')
     : '<div style="color:#64748b;">ยังไม่มีคำขอรับพัสดุในระบบ</div>';
 
-  document.getElementById('unmatchedRequestsList').innerHTML = pendingRequests.length
-    ? pendingRequests.map(r => {
-        const loc = getLocationById(r.locationId);
-        return `<li><strong>${escapeHTML(r.house)}</strong> — ${escapeHTML(loc ? loc.name : '-')} ${r.note ? `(${escapeHTML(r.note)})` : ''}</li>`;
-      }).join('')
-    : '<li>ไม่มีคำขอที่รอพัสดุ</li>';
-
-  const grouped = {};
-  for (const r of matchedRequests) grouped[r.house] = (grouped[r.house] || 0) + 1;
-  const matchedHouses = Object.keys(grouped);
-  document.getElementById('matchedHousesList').innerHTML = matchedHouses.length
-    ? matchedHouses.map(h => `
-        <label style="display:inline-flex; align-items:center; gap:6px; margin-right:10px; padding:6px 10px; background:#eff6ff; border-radius:6px;">
-          <input type="checkbox" class="matched-house-checkbox" value="${escapeHTML(h)}" checked style="width:auto;" />
-          <span><strong>${escapeHTML(h)}</strong> (${grouped[h]})</span>
-        </label>
+  document.getElementById('reportHistoryList').innerHTML = state.reportHistory.length
+    ? state.reportHistory.map((rep, idx) => `
+        <div style="padding:8px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+          <div><strong>${escapeHTML(rep.title)}</strong> — ${formatDateTimeTH(rep.createdAt)} (${rep.count} รายการ)</div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="window.__viewReport(${idx})">ดู / พิมพ์ซ้ำ</button>
+        </div>
       `).join('')
-    : '<span style="color:#64748b;">ยังไม่มีบ้านที่จับคู่พัสดุพร้อมออกรายงาน</span>';
-
-  document.getElementById('dailyParcelsList').innerHTML = state.parcels.length
-    ? state.parcels.map(p => `
-        <li style="margin-bottom:6px;">
-          <strong>${escapeHTML(p.house)}</strong>
-          <span class="badge ${p.matchedReqId ? 'badge-matched' : 'badge-pending'}">${p.matchedReqId ? 'จับคู่แล้ว' : 'รอคำขอ'}</span>
-          — ${escapeHTML(p.courier)} ${p.tracking ? `(${escapeHTML(p.tracking)})` : ''}
-          <button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteParcel('${p.id}')">ลบ</button>
-        </li>
-      `).join('')
-    : '<li>ยังไม่มีพัสดุประจำวัน</li>';
+    : '<div style="color:#64748b;">ยังไม่มีประวัติการออกรายงาน</div>';
 
   document.getElementById('locationsManageList').innerHTML = state.locations.map(l => `
     <li style="margin-bottom:6px;">
@@ -1159,8 +1872,32 @@ function renderAdminData() {
   document.getElementById('housesChipsContainer').innerHTML = state.houses.map(h =>
     `<span class="house-chip">${escapeHTML(h)} <button type="button" onclick="window.__removeHouse('${escapeHTML(h)}')">×</button></span>`
   ).join('');
+
+  document.getElementById('slidesManageList').innerHTML = state.slides.map(s => `
+    <div style="padding:8px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+      <div><strong>${escapeHTML(s.title)}</strong> — ${escapeHTML(s.subtitle || '')}</div>
+      <button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteSlide('${s.id}')">ลบ</button>
+    </div>
+  `).join('');
+
+  document.getElementById('tickersManageList').innerHTML = state.announcements.map((txt, idx) => `
+    <li style="margin-bottom:6px;">
+      ${escapeHTML(txt)}
+      <button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteTicker(${idx})">ลบ</button>
+    </li>
+  `).join('');
+
+  document.getElementById('adminAccountsList').innerHTML = state.adminAccounts.map(a => `
+    <li style="margin-bottom:6px;">
+      <strong>${escapeHTML(a.username)}</strong> (${escapeHTML(a.displayName)})
+      ${state.adminAccounts.length > 1 ? `<button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteAdminAcc('${a.id}')">ลบ</button>` : ''}
+    </li>
+  `).join('');
 }
 
+window.__viewReport = idx => {
+  if (state.reportHistory[idx]) renderReportArea(state.reportHistory[idx]);
+};
 window.__deleteParcel = async id => {
   const parcel = state.parcels.find(p => p.id === id);
   if (parcel && parcel.matchedReqId) {
@@ -1170,7 +1907,6 @@ window.__deleteParcel = async id => {
   state.parcels = state.parcels.filter(p => p.id !== id);
   await saveAndSyncFullState();
 };
-
 window.__deleteRequest = async id => {
   const req = state.requests.find(r => r.id === id);
   if (req && req.matchedParcelId) {
@@ -1180,19 +1916,30 @@ window.__deleteRequest = async id => {
   state.requests = state.requests.filter(r => r.id !== id);
   await saveAndSyncFullState();
 };
-
 window.__deleteLocation = async id => {
   state.locations = state.locations.filter(l => l.id !== id);
   await saveAndSyncFullState();
 };
-
 window.__removeHouse = async house => {
   state.houses = state.houses.filter(h => h !== house);
   await saveAndSyncFullState();
 };
+window.__deleteSlide = async id => {
+  state.slides = state.slides.filter(s => s.id !== id);
+  initSlideshow();
+  await saveAndSyncFullState();
+};
+window.__deleteTicker = async idx => {
+  state.announcements.splice(idx, 1);
+  await saveAndSyncFullState();
+};
+window.__deleteAdminAcc = async id => {
+  state.adminAccounts = state.adminAccounts.filter(a => a.id !== id);
+  await saveAndSyncFullState();
+};
 
 window.manualSyncNow = async () => {
-  if (!getCloudUrl()) return alert('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "ตั้งค่า & เชื่อม Cloud" ก่อนครับ');
+  if (!getCloudUrl()) return alert('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "7. การตั้งค่า" ก่อนครับ');
   const ok = await pullFromCloud(false);
   if (ok) alert('ดึงข้อมูลล่าสุดจาก Cloud เรียบร้อย');
 };
@@ -1204,17 +1951,20 @@ function startCloudPolling() {
 }
 
 function renderAll() {
+  applyBrandingAndVisibility();
   renderUserFormOptions();
   renderAnnouncementTicker();
   renderAdminData();
 }
 
 /* =========================================================
-   6. INITIALIZE
+   8. INITIALIZE
    ========================================================= */
 document.addEventListener('DOMContentLoaded', async () => {
+  checkAutoClearTimers();
   runAutoMatching();
   saveLocalState();
+  applyBrandingAndVisibility();
   renderAdminVisibility();
   bindUserRequestForm();
   bindNavigationAndAdmin();
@@ -1222,13 +1972,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderAll();
   if (state.reportHistory[0]) renderReportArea(state.reportHistory[0]);
 
-  await pullFromCloud(true);
+  if (state.settings.autoSyncOnLoad) {
+    await pullFromCloud(true);
+  }
   startCloudPolling();
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') pullFromCloud(true);
+    if (document.visibilityState === 'visible' && state.settings.autoSyncOnLoad) pullFromCloud(true);
   });
   setInterval(renderAnnouncementTicker, 5000);
+  setInterval(checkAutoClearTimers, 60000);
 });
 </script>
 </body>
