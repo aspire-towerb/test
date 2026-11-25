@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ระบบจัดการและแจ้งรับพัสดุนิติบุคคล (ภาพประกาศปรับตามหน้าจอ)</title>
+  <title>ระบบจัดการและแจ้งรับพัสดุนิติบุคคล (รองรับ Google Drive)</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -31,8 +31,9 @@
       border: none; border-radius: 8px; padding: 9px 14px; font-size: 14px;
       cursor: pointer; font-weight: 600; transition: 0.15s;
     }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
     .btn-success { background: var(--success); color: #fff; }
     .btn-light { background: rgba(255,255,255,0.18); color: #fff; }
     .btn-light.active { background: #fff; color: var(--primary-dark); }
@@ -426,12 +427,12 @@
       <!-- TAB 5 -->
       <div id="tabAnnouncementsAdmins" class="admin-tab-panel" style="display:none;">
         <div class="card">
-          <h3>จัดการภาพสไลด์โชว์ประกาศหน้าบ้าน</h3>
+          <h3>จัดการภาพสไลด์โชว์ประกาศหน้าบ้าน (บันทึกรูปลง Google Drive อัตโนมัติ)</h3>
           <form id="addSlideForm" class="form-grid" style="margin-bottom:12px;">
             <div><label>หัวข้อประกาศสไลด์ *</label><input id="slideTitleInput" required /></div>
             <div><label>รายละเอียดสไลด์</label><input id="slideSubtitleInput" /></div>
             <div><label>ลิงก์รูปภาพ (URL)</label><input id="slideImageUrlInput" placeholder="https://..." /></div>
-            <div><label>หรืออัปโหลดรูปภาพจากเครื่อง (ไม่เกิน 1.5 MB)</label><input type="file" id="slideImageFileInput" accept="image/*" /></div>
+            <div><label>หรืออัปโหลดรูปภาพจากเครื่องขึ้น Google Drive (ไม่เกิน 4 MB)</label><input type="file" id="slideImageFileInput" accept="image/*" /></div>
             <div style="display:flex; align-items:flex-end;"><button type="submit" class="btn btn-primary">เพิ่มภาพสไลด์ประกาศ</button></div>
           </form>
           <div id="slidesManageList"></div>
@@ -582,9 +583,9 @@
             </div>
           </div>
 
-          <!-- 7.4 การเชื่อมต่อ Google Sheets Cloud & Telegram -->
+          <!-- 7.4 การเชื่อมต่อ Google Drive / Sheets Cloud & Telegram -->
           <div class="card">
-            <h3>7.4 เชื่อมต่อ Google Sheets (ซิงค์หลายเครื่อง) & การแจ้งเตือน Telegram</h3>
+            <h3>7.4 เชื่อมต่อ Google Drive & Google Sheets Cloud & Telegram</h3>
             <div class="form-grid">
               <div>
                 <label for="settingCloudSyncUrl">URL ของ Google Apps Script Web App</label>
@@ -617,7 +618,7 @@
 
             <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
               <button type="button" class="btn btn-outline btn-sm" onclick="testTelegramAlert()">ทดสอบส่งข้อความ Telegram</button>
-              <button type="button" class="btn btn-outline btn-sm" onclick="manualSyncNow()">ทดสอบซิงค์ Google Sheets ทันที</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="manualSyncNow()">ทดสอบซิงค์ Google Drive / Sheets ทันที</button>
             </div>
           </div>
 
@@ -640,7 +641,7 @@
    ========================================================= */
 const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V6';
 const DEFAULT_CLOUD_URL = '';
-const MAX_SLIDE_IMAGE_BYTES = 1.5 * 1024 * 1024; // 1.5 MB
+const MAX_SLIDE_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB (อัปโหลดขึ้น Google Drive)
 
 const defaultState = {
   isAdminLoggedIn: false,
@@ -669,13 +670,15 @@ const defaultState = {
       id: 'sld-1',
       title: 'ประกาศนิติบุคคล: ระบบแจ้งรับพัสดุ',
       subtitle: 'กรอกบ้านเลขที่และเลือกจุดรับพัสดุได้ทันที ข้อมูลซิงค์ถึงเจ้าหน้าที่อัตโนมัติ',
-      imageUrl: ''
+      imageUrl: '',
+      driveFileId: ''
     },
     {
       id: 'sld-2',
       title: 'การรับพัสดุและฝากตู้ HIVE BOX',
       subtitle: 'จุดรับที่บังคับเบอร์โทรจะมีช่องกรอกเบอร์แสดงให้อัตโนมัติ',
-      imageUrl: ''
+      imageUrl: '',
+      driveFileId: ''
     }
   ],
   settings: {
@@ -754,16 +757,28 @@ function saveLocalState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     return true;
   } catch (err) {
-    console.error('Save localStorage failed:', err);
     if (err && err.name === 'QuotaExceededError') {
-      alert('พื้นที่เก็บข้อมูลในเบราว์เซอร์เต็ม (อาจเกิดจากรูปภาพสไลด์ขนาดใหญ่) กรุณาลบรูปเก่าหรือใช้ลิงก์ URL รูปภาพแทน');
+      try {
+        // กรณีมีข้อมูล Base64 ค้างใน Cloud ให้ตัดเฉพาะ Base64 ออกตอนบันทึกลง Cache ในเครื่อง (ลิงก์ Google Drive ยังอยู่ครบ)
+        const compactState = JSON.parse(JSON.stringify(state));
+        if (Array.isArray(compactState.slides)) {
+          compactState.slides = compactState.slides.map(s => ({
+            ...s,
+            imageUrl: (s.imageUrl || '').startsWith('data:image/') ? '' : s.imageUrl
+          }));
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(compactState));
+        return true;
+      } catch (innerErr) {
+        console.warn('localStorage quota exceeded even after compacting:', innerErr);
+      }
     }
     return false;
   }
 }
 
 /* =========================================================
-   2. CLOUD SYNC & TELEGRAM HELPERS
+   2. GOOGLE DRIVE / CLOUD SYNC & TELEGRAM HELPERS
    ========================================================= */
 function getCloudUrl() {
   return (state.settings.cloudSyncUrl || '').trim();
@@ -776,7 +791,7 @@ function updateCloudBadge(statusText) {
     badge.textContent = 'สถานะซิงค์: โหมดออฟไลน์ในเครื่อง (ตั้งค่า URL ได้ที่แท็บ 7. การตั้งค่า)';
     badge.style.color = '#64748b';
   } else {
-    badge.textContent = statusText || 'สถานะซิงค์: เชื่อมต่อ Google Sheets Cloud แล้ว';
+    badge.textContent = statusText || 'สถานะซิงค์: เชื่อมต่อ Google Drive / Sheets Cloud แล้ว';
     badge.style.color = '#15803d';
   }
 }
@@ -845,7 +860,7 @@ async function pullFromCloud(silent = true) {
     }
     updateCloudBadge('สถานะซิงค์: รูปแบบข้อมูลจาก Cloud ไม่ถูกต้อง');
   } catch (err) {
-    updateCloudBadge('สถานะซิงค์: เชื่อมต่อ Cloud ไม่สำเร็จ (ใช้ข้อมูลในเครื่องชั่วคราว)');
+    updateCloudBadge('สถานะซิงค์: เชื่อมต่อ Cloud ไม่สำเร็จ (ตรวจสอบการเปิดผ่าน http/https และสิทธิ์ Anyone)');
     if (!silent) console.error(err);
   } finally {
     isSyncing = false;
@@ -862,8 +877,10 @@ async function pushActionToCloud(payload) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
-    if (data && data.ok && data.state && typeof data.state === 'object') {
-      mergeRemoteState(data.state);
+    if (data && data.ok) {
+      if (data.state && typeof data.state === 'object') {
+        mergeRemoteState(data.state);
+      }
       updateCloudBadge(`สถานะซิงค์: บันทึกขึ้น Cloud เมื่อ ${new Date().toLocaleTimeString('th-TH')}`);
       return true;
     }
@@ -871,6 +888,30 @@ async function pushActionToCloud(payload) {
     console.error('Push to cloud failed:', err);
   }
   return false;
+}
+
+async function uploadSlideImageToDrive(file) {
+  const url = getCloudUrl();
+  if (!url) {
+    throw new Error('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "7. การตั้งค่า" ก่อนอัปโหลดรูปขึ้น Google Drive');
+  }
+  const base64Data = await readImageFileAsDataUrl(file);
+  const data = await fetchJsonWithCheck(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'UPLOAD_SLIDE_IMAGE',
+      fileName: file.name,
+      base64Data
+    })
+  });
+  if (!data || !data.ok || !data.imageUrl) {
+    throw new Error(data?.error || 'อัปโหลดรูปภาพขึ้น Google Drive ไม่สำเร็จ');
+  }
+  return {
+    imageUrl: data.imageUrl,
+    driveFileId: data.fileId || ''
+  };
 }
 
 function getCleanCloudPayloadState() {
@@ -1034,7 +1075,7 @@ function readImageFileAsDataUrl(file) {
       return reject(new Error('กรุณาเลือกไฟล์รูปภาพเท่านั้น'));
     }
     if (file.size > MAX_SLIDE_IMAGE_BYTES) {
-      return reject(new Error('ขนาดไฟล์รูปภาพเกิน 1.5 MB กรุณาย่อขนาดหรือใช้ URL รูปภาพแทน'));
+      return reject(new Error('ขนาดไฟล์รูปภาพเกิน 4 MB กรุณาย่อขนาดไฟล์ก่อนอัปโหลด'));
     }
     const reader = new FileReader();
     reader.onload = evt => resolve(String(evt.target?.result || ''));
@@ -1587,16 +1628,32 @@ function bindNavigationAndAdmin() {
     const subtitle = document.getElementById('slideSubtitleInput').value.trim();
     const urlVal = document.getElementById('slideImageUrlInput').value.trim();
     const file = document.getElementById('slideImageFileInput').files?.[0];
+    const submitBtn = e.target.querySelector('button[type="submit"]');
 
     try {
-      const imgSrc = file ? await readImageFileAsDataUrl(file) : urlVal;
-      state.slides.push({ id: uid('sld'), title, subtitle, imageUrl: imgSrc });
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = file ? 'กำลังอัปโหลดรูปขึ้น Google Drive...' : 'กำลังบันทึก...';
+      }
+      let imgSrc = urlVal;
+      let driveFileId = '';
+      if (file) {
+        const uploaded = await uploadSlideImageToDrive(file);
+        imgSrc = uploaded.imageUrl;
+        driveFileId = uploaded.driveFileId;
+      }
+      state.slides.push({ id: uid('sld'), title, subtitle, imageUrl: imgSrc, driveFileId });
       e.target.reset();
       lastSlidesSignature = '';
       initSlideshow();
       await saveAndSyncFullState();
     } catch (err) {
       alert(err.message || 'ไม่สามารถเพิ่มภาพสไลด์ได้');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'เพิ่มภาพสไลด์ประกาศ';
+      }
     }
   });
 
@@ -1741,6 +1798,10 @@ function bindNavigationAndAdmin() {
     const btn = e.target.closest('[data-delete-slide]');
     if (!btn) return;
     const id = btn.dataset.deleteSlide;
+    const targetSlide = state.slides.find(s => s.id === id);
+    if (targetSlide && targetSlide.driveFileId && getCloudUrl()) {
+      pushActionToCloud({ action: 'DELETE_DRIVE_FILE', fileId: targetSlide.driveFileId });
+    }
     state.slides = state.slides.filter(s => s.id !== id);
     lastSlidesSignature = '';
     initSlideshow();
@@ -2075,8 +2136,11 @@ function renderAdminData() {
   ).join('');
 
   document.getElementById('slidesManageList').innerHTML = state.slides.map(s => `
-    <div style="padding:8px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-      <div><strong>${escapeHTML(s.title)}</strong> — ${escapeHTML(s.subtitle || '')}</div>
+    <div style="padding:8px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+      <div>
+        <strong>${escapeHTML(s.title)}</strong> — ${escapeHTML(s.subtitle || '')}
+        ${s.imageUrl ? `<div style="font-size:11px; color:#15803d;">รูปภาพ: ${s.driveFileId ? 'Google Drive' : 'URL'}</div>` : ''}
+      </div>
       <button type="button" class="btn btn-danger btn-sm" data-delete-slide="${escapeHTML(s.id)}">ลบ</button>
     </div>
   `).join('');
