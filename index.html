@@ -431,7 +431,7 @@
             <div><label>หัวข้อประกาศสไลด์ *</label><input id="slideTitleInput" required /></div>
             <div><label>รายละเอียดสไลด์</label><input id="slideSubtitleInput" /></div>
             <div><label>ลิงก์รูปภาพ (URL)</label><input id="slideImageUrlInput" placeholder="https://..." /></div>
-            <div><label>หรืออัปโหลดรูปภาพจากเครื่อง</label><input type="file" id="slideImageFileInput" accept="image/*" /></div>
+            <div><label>หรืออัปโหลดรูปภาพจากเครื่อง (ไม่เกิน 1.5 MB)</label><input type="file" id="slideImageFileInput" accept="image/*" /></div>
             <div style="display:flex; align-items:flex-end;"><button type="submit" class="btn btn-primary">เพิ่มภาพสไลด์ประกาศ</button></div>
           </form>
           <div id="slidesManageList"></div>
@@ -640,6 +640,7 @@
    ========================================================= */
 const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V6';
 const DEFAULT_CLOUD_URL = '';
+const MAX_SLIDE_IMAGE_BYTES = 1.5 * 1024 * 1024; // 1.5 MB
 
 const defaultState = {
   isAdminLoggedIn: false,
@@ -746,12 +747,18 @@ let slideIndex = 0;
 let slideTimer = null;
 let isSyncing = false;
 let pollTimer = null;
+let lastSlidesSignature = '';
 
 function saveLocalState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
   } catch (err) {
-    console.error(err);
+    console.error('Save localStorage failed:', err);
+    if (err && err.name === 'QuotaExceededError') {
+      alert('พื้นที่เก็บข้อมูลในเบราว์เซอร์เต็ม (อาจเกิดจากรูปภาพสไลด์ขนาดใหญ่) กรุณาลบรูปเก่าหรือใช้ลิงก์ URL รูปภาพแทน');
+    }
+    return false;
   }
 }
 
@@ -774,6 +781,19 @@ function updateCloudBadge(statusText) {
   }
 }
 
+async function fetchJsonWithCheck(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  }
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    throw new Error('Invalid JSON response from server');
+  }
+}
+
 function mergeRemoteState(remote) {
   if (!remote || typeof remote !== 'object') return;
   const localAuth = state.isAdminLoggedIn;
@@ -791,7 +811,7 @@ function mergeRemoteState(remote) {
   if (Array.isArray(remote.reportHistory)) state.reportHistory = remote.reportHistory;
   if (Array.isArray(remote.announcements) && remote.announcements.length) state.announcements = remote.announcements;
   if (Array.isArray(remote.slides) && remote.slides.length) state.slides = remote.slides;
-  if (remote.settings) {
+  if (remote.settings && typeof remote.settings === 'object') {
     state.settings = {
       ...state.settings,
       ...remote.settings,
@@ -808,7 +828,7 @@ function mergeRemoteState(remote) {
   state.customEndDate = localEnd;
 
   saveLocalState();
-  initSlideshow();
+  initSlideshowIfChanged();
   renderAll();
 }
 
@@ -817,13 +837,13 @@ async function pullFromCloud(silent = true) {
   if (!url || isSyncing) return false;
   isSyncing = true;
   try {
-    const res = await fetch(`${url}?t=${Date.now()}`, { method: 'GET' });
-    const data = await res.json();
-    if (data && data.ok && data.state) {
+    const data = await fetchJsonWithCheck(`${url}?t=${Date.now()}`, { method: 'GET' });
+    if (data && data.ok && data.state && typeof data.state === 'object') {
       mergeRemoteState(data.state);
       updateCloudBadge(`สถานะซิงค์: อัปเดตล่าสุด ${new Date().toLocaleTimeString('th-TH')}`);
       return true;
     }
+    updateCloudBadge('สถานะซิงค์: รูปแบบข้อมูลจาก Cloud ไม่ถูกต้อง');
   } catch (err) {
     updateCloudBadge('สถานะซิงค์: เชื่อมต่อ Cloud ไม่สำเร็จ (ใช้ข้อมูลในเครื่องชั่วคราว)');
     if (!silent) console.error(err);
@@ -837,19 +857,18 @@ async function pushActionToCloud(payload) {
   const url = getCloudUrl();
   if (!url) return false;
   try {
-    const res = await fetch(url, {
+    const data = await fetchJsonWithCheck(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (data && data.ok && data.state) {
+    if (data && data.ok && data.state && typeof data.state === 'object') {
       mergeRemoteState(data.state);
       updateCloudBadge(`สถานะซิงค์: บันทึกขึ้น Cloud เมื่อ ${new Date().toLocaleTimeString('th-TH')}`);
       return true;
     }
   } catch (err) {
-    console.error(err);
+    console.error('Push to cloud failed:', err);
   }
   return false;
 }
@@ -876,12 +895,11 @@ async function sendTelegramMessage(text) {
   const chatId = (state.settings.telegramChatId || '').trim();
   if (!token || !chatId) return false;
   try {
-    const res = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
+    const data = await fetchJsonWithCheck(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text })
     });
-    const data = await res.json();
     return Boolean(data && data.ok);
   } catch (_) {
     return false;
@@ -908,7 +926,15 @@ function escapeHTML(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getLocalDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function formatDateTimeTH(isoStr) {
@@ -969,14 +995,20 @@ function runAutoMatching() {
 
 function checkAutoClearTimers() {
   const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = getLocalDateKey(now);
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   let changed = false;
 
   if (state.settings.enableAutoClearParcels) {
     const pTime = state.settings.autoClearParcelsTime || '19:00';
-    if (currentHHMM >= pTime && state.settings.lastAutoClearParcelDate !== todayKey && state.parcels.length > 0) {
+    if (currentHHMM >= pTime && state.settings.lastAutoClearParcelDate !== todayKey) {
       state.parcels = [];
+      state.requests.forEach(r => {
+        if (r.status === 'matched') {
+          r.status = 'pending';
+          r.matchedParcelId = null;
+        }
+      });
       state.settings.lastAutoClearParcelDate = todayKey;
       changed = true;
     }
@@ -993,6 +1025,22 @@ function checkAutoClearTimers() {
   }
 
   if (changed) saveAndSyncFullState();
+}
+
+function readImageFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve('');
+    if (!file.type.startsWith('image/')) {
+      return reject(new Error('กรุณาเลือกไฟล์รูปภาพเท่านั้น'));
+    }
+    if (file.size > MAX_SLIDE_IMAGE_BYTES) {
+      return reject(new Error('ขนาดไฟล์รูปภาพเกิน 1.5 MB กรุณาย่อขนาดหรือใช้ URL รูปภาพแทน'));
+    }
+    const reader = new FileReader();
+    reader.onload = evt => resolve(String(evt.target?.result || ''));
+    reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์รูปภาพได้'));
+    reader.readAsDataURL(file);
+  });
 }
 
 /* =========================================================
@@ -1023,6 +1071,18 @@ function applyBrandingAndVisibility() {
   if (noteWrap) noteWrap.style.display = s.showNoteField !== false ? 'block' : 'none';
 
   syncPhoneFieldRequirement();
+}
+
+function initSlideshowIfChanged() {
+  const slides = state.slides && state.slides.length ? state.slides : defaultState.slides;
+  const sig = JSON.stringify({
+    slides,
+    projectName: state.settings.projectName,
+    showSlideshow: state.settings.showSlideshow
+  });
+  if (sig === lastSlidesSignature) return;
+  lastSlidesSignature = sig;
+  initSlideshow();
 }
 
 function initSlideshow() {
@@ -1105,7 +1165,7 @@ function renderUserFormOptions() {
     sel.innerHTML = optionsHTML;
     if (prev && state.locations.some(l => l.id === prev)) {
       sel.value = prev;
-    } else if (selId === 'reqLocationSelect' && state.settings.defaultLocationId) {
+    } else if (selId === 'reqLocationSelect' && state.settings.defaultLocationId && state.locations.some(l => l.id === state.settings.defaultLocationId)) {
       sel.value = state.settings.defaultLocationId;
     }
   });
@@ -1187,7 +1247,8 @@ function bindUserRequestForm() {
     const locationId = document.getElementById('reqLocationSelect')?.value || '';
     const loc = getLocationById(locationId);
     const phoneRequired = Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false);
-    const phone = phoneRequired ? (document.getElementById('reqPhoneInput')?.value || '').trim() : '';
+    const rawPhone = (document.getElementById('reqPhoneInput')?.value || '').replace(/\s+/g, '').trim();
+    const phone = phoneRequired ? rawPhone : '';
     const note = state.settings.showNoteField !== false ? (document.getElementById('reqNoteInput')?.value || '').trim() : '';
 
     if (!house) return alert('กรุณากรอกบ้านเลขที่ / ห้องชุด');
@@ -1218,13 +1279,8 @@ function bindUserRequestForm() {
 
     if (state.settings.notifyTelegramOnReq) {
       await sendTelegramMessage(
-        `📦 คำขอรับพัสดุใหม่
-บ้านเลขที่: ${latest.house}
-จุดรับ: ${loc.name}
-สถานะ: ${latest.status}` +
-        `${latest.phone ? `
-โทร: ${latest.phone}` : ''}${latest.note ? `
-หมายเหตุ: ${latest.note}` : ''}`
+        `📦 คำขอรับพัสดุใหม่\nบ้านเลขที่: ${latest.house}\nจุดรับ: ${loc.name}\nสถานะ: ${latest.status}` +
+        `${latest.phone ? `\nโทร: ${latest.phone}` : ''}${latest.note ? `\nหมายเหตุ: ${latest.note}` : ''}`
       );
     }
 
@@ -1279,6 +1335,7 @@ window.resetDefaultSettings = async function () {
   state.settings = { ...cloneDefault().settings, cloudSyncUrl: keepUrl };
   populateSettingsForm();
   applyBrandingAndVisibility();
+  lastSlidesSignature = '';
   initSlideshow();
   await saveAndSyncFullState();
   alert('คืนค่าการตั้งค่าเริ่มต้นเรียบร้อย');
@@ -1380,28 +1437,43 @@ function bindNavigationAndAdmin() {
 
   document.getElementById('importParcelsExcelInput').addEventListener('change', e => {
     const file = e.target.files?.[0];
-    if (!file || typeof XLSX === 'undefined') return;
+    if (!file) return;
+    if (typeof XLSX === 'undefined') {
+      e.target.value = '';
+      return alert('ไม่พบไลบรารี SheetJS สำหรับอ่านไฟล์ Excel');
+    }
     const reader = new FileReader();
     reader.onload = async evt => {
-      const wb = XLSX.read(evt.target.result, { type: 'binary' });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      let count = 0;
-      for (const r of rows) {
-        const h = r.house || r['บ้านเลขที่'] || r['ห้อง'] || '';
-        if (!String(h).trim()) continue;
-        state.parcels.unshift({
-          id: uid('pcl'),
-          house: normalizeHouseNumber(h),
-          courier: String(r.courier || r['ขนส่ง'] || 'พัสดุทั่วไป').trim(),
-          tracking: String(r.tracking || r['เลขพัสดุ'] || '').trim(),
-          note: String(r.note || r['หมายเหตุ'] || '').trim(),
-          matchedReqId: null,
-          createdAt: new Date().toISOString()
-        });
-        count += 1;
+      try {
+        const wb = XLSX.read(evt.target.result, { type: 'binary' });
+        if (!wb.SheetNames || !wb.SheetNames.length) throw new Error('ไม่พบแผ่นงานในไฟล์');
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+        let count = 0;
+        for (const r of rows) {
+          const h = r.house || r['บ้านเลขที่'] || r['ห้อง'] || '';
+          if (!String(h).trim()) continue;
+          state.parcels.unshift({
+            id: uid('pcl'),
+            house: normalizeHouseNumber(h),
+            courier: String(r.courier || r['ขนส่ง'] || 'พัสดุทั่วไป').trim(),
+            tracking: String(r.tracking || r['เลขพัสดุ'] || '').trim(),
+            note: String(r.note || r['หมายเหตุ'] || '').trim(),
+            matchedReqId: null,
+            createdAt: new Date().toISOString()
+          });
+          count += 1;
+        }
+        await saveAndSyncFullState();
+        alert(`นำเข้าพัสดุสำเร็จ ${count} รายการ`);
+      } catch (err) {
+        console.error(err);
+        alert('ไม่สามารถอ่านไฟล์ Excel/CSV ได้ กรุณาตรวจสอบรูปแบบไฟล์');
+      } finally {
+        e.target.value = '';
       }
-      await saveAndSyncFullState();
-      alert(`นำเข้าพัสดุสำเร็จ ${count} รายการ`);
+    };
+    reader.onerror = () => {
+      alert('เกิดข้อผิดพลาดในการอ่านไฟล์');
       e.target.value = '';
     };
     reader.readAsBinaryString(file);
@@ -1411,7 +1483,7 @@ function bindNavigationAndAdmin() {
     e.preventDefault();
     const house = normalizeHouseNumber(document.getElementById('adminReqHouseInput').value);
     const locationId = document.getElementById('adminReqLocationSelect').value;
-    const phone = document.getElementById('adminReqPhoneInput').value.trim();
+    const phone = document.getElementById('adminReqPhoneInput').value.replace(/\s+/g, '').trim();
     const note = document.getElementById('adminReqNoteInput').value.trim();
     if (!house || !locationId) return alert('กรุณากรอกบ้านเลขที่และจุดรับ');
 
@@ -1428,31 +1500,46 @@ function bindNavigationAndAdmin() {
 
   document.getElementById('importRequestsExcelInput').addEventListener('change', e => {
     const file = e.target.files?.[0];
-    if (!file || typeof XLSX === 'undefined') return;
+    if (!file) return;
+    if (typeof XLSX === 'undefined') {
+      e.target.value = '';
+      return alert('ไม่พบไลบรารี SheetJS สำหรับอ่านไฟล์ Excel');
+    }
     const reader = new FileReader();
     reader.onload = async evt => {
-      const wb = XLSX.read(evt.target.result, { type: 'binary' });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      let count = 0;
-      for (const r of rows) {
-        const h = r.house || r['บ้านเลขที่'] || '';
-        if (!String(h).trim()) continue;
-        const locName = String(r.location || r['จุดรับ'] || '').trim();
-        const locObj = state.locations.find(l => l.name.includes(locName)) || state.locations[0];
-        state.requests.unshift({
-          id: uid('req'),
-          house: normalizeHouseNumber(h),
-          locationId: locObj ? locObj.id : '',
-          phone: String(r.phone || r['เบอร์โทร'] || '').trim(),
-          note: String(r.note || r['หมายเหตุ'] || '').trim(),
-          status: 'pending',
-          matchedParcelId: null,
-          createdAt: new Date().toISOString()
-        });
-        count += 1;
+      try {
+        const wb = XLSX.read(evt.target.result, { type: 'binary' });
+        if (!wb.SheetNames || !wb.SheetNames.length) throw new Error('ไม่พบแผ่นงานในไฟล์');
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+        let count = 0;
+        for (const r of rows) {
+          const h = r.house || r['บ้านเลขที่'] || '';
+          if (!String(h).trim()) continue;
+          const locName = String(r.location || r['จุดรับ'] || '').trim();
+          const locObj = state.locations.find(l => l.name.includes(locName)) || state.locations[0];
+          state.requests.unshift({
+            id: uid('req'),
+            house: normalizeHouseNumber(h),
+            locationId: locObj ? locObj.id : '',
+            phone: String(r.phone || r['เบอร์โทร'] || '').trim(),
+            note: String(r.note || r['หมายเหตุ'] || '').trim(),
+            status: 'pending',
+            matchedParcelId: null,
+            createdAt: new Date().toISOString()
+          });
+          count += 1;
+        }
+        await saveAndSyncFullState();
+        alert(`นำเข้าคำขอสำเร็จ ${count} รายการ`);
+      } catch (err) {
+        console.error(err);
+        alert('ไม่สามารถอ่านไฟล์ Excel/CSV ได้ กรุณาตรวจสอบรูปแบบไฟล์');
+      } finally {
+        e.target.value = '';
       }
-      await saveAndSyncFullState();
-      alert(`นำเข้าคำขอสำเร็จ ${count} รายการ`);
+    };
+    reader.onerror = () => {
+      alert('เกิดข้อผิดพลาดในการอ่านไฟล์');
       e.target.value = '';
     };
     reader.readAsBinaryString(file);
@@ -1476,6 +1563,7 @@ function bindNavigationAndAdmin() {
     const pad = parseInt(document.getElementById('genHousePad').value, 10) || 0;
     const excludeRaw = document.getElementById('genHouseExclude').value;
     if (Number.isNaN(s) || Number.isNaN(end) || s > end) return alert('ระบุช่วงเลขไม่ถูกต้อง');
+    if (end - s > 2000) return alert('สร้างบ้านเลขที่ได้ครั้งละไม่เกิน 2,000 รายการ');
 
     const excluded = new Set(
       excludeRaw.split(',').map(x => parseInt(x.trim(), 10)).filter(n => !Number.isNaN(n))
@@ -1500,19 +1588,15 @@ function bindNavigationAndAdmin() {
     const urlVal = document.getElementById('slideImageUrlInput').value.trim();
     const file = document.getElementById('slideImageFileInput').files?.[0];
 
-    const finalizeSlide = async imgSrc => {
+    try {
+      const imgSrc = file ? await readImageFileAsDataUrl(file) : urlVal;
       state.slides.push({ id: uid('sld'), title, subtitle, imageUrl: imgSrc });
       e.target.reset();
+      lastSlidesSignature = '';
       initSlideshow();
       await saveAndSyncFullState();
-    };
-
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = evt => finalizeSlide(evt.target.result);
-      reader.readAsDataURL(file);
-    } else {
-      await finalizeSlide(urlVal);
+    } catch (err) {
+      alert(err.message || 'ไม่สามารถเพิ่มภาพสไลด์ได้');
     }
   });
 
@@ -1544,12 +1628,20 @@ function bindNavigationAndAdmin() {
     reader.onload = async evt => {
       try {
         const parsed = JSON.parse(evt.target.result);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('Invalid backup structure');
+        }
         mergeRemoteState(parsed);
         await saveAndSyncFullState();
         alert('กู้คืนข้อมูลสำเร็จ');
       } catch (_) {
         alert('ไฟล์สำรองไม่ถูกต้อง');
+      } finally {
+        e.target.value = '';
       }
+    };
+    reader.onerror = () => {
+      alert('ไม่สามารถอ่านไฟล์สำรองได้');
       e.target.value = '';
     };
     reader.readAsText(file);
@@ -1587,10 +1679,91 @@ function bindNavigationAndAdmin() {
     state.settings.notifyTelegramOnReq = document.getElementById('settingNotifyTelegramOnReq').checked;
 
     applyBrandingAndVisibility();
+    lastSlidesSignature = '';
     initSlideshow();
     startCloudPolling();
     await saveAndSyncFullState();
     alert('บันทึกการตั้งค่าทั้งหมดเรียบร้อยแล้ว!');
+  });
+
+  // Event Delegation for dynamic lists & buttons
+  document.getElementById('dailyParcelsTableBody').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-delete-parcel]');
+    if (!btn) return;
+    const id = btn.dataset.deleteParcel;
+    const parcel = state.parcels.find(p => p.id === id);
+    if (parcel && parcel.matchedReqId) {
+      const req = state.requests.find(r => r.id === parcel.matchedReqId);
+      if (req && req.status === 'matched') { req.status = 'pending'; req.matchedParcelId = null; }
+    }
+    state.parcels = state.parcels.filter(p => p.id !== id);
+    await saveAndSyncFullState();
+  });
+
+  document.getElementById('allRequestsList').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-delete-request]');
+    if (!btn) return;
+    const id = btn.dataset.deleteRequest;
+    const req = state.requests.find(r => r.id === id);
+    if (req && req.matchedParcelId) {
+      const p = state.parcels.find(item => item.id === req.matchedParcelId);
+      if (p) p.matchedReqId = null;
+    }
+    state.requests = state.requests.filter(r => r.id !== id);
+    await saveAndSyncFullState();
+  });
+
+  document.getElementById('reportHistoryList').addEventListener('click', e => {
+    const btn = e.target.closest('[data-view-report]');
+    if (!btn) return;
+    const idx = Number(btn.dataset.viewReport);
+    if (state.reportHistory[idx]) renderReportArea(state.reportHistory[idx]);
+  });
+
+  document.getElementById('locationsManageList').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-delete-location]');
+    if (!btn) return;
+    const id = btn.dataset.deleteLocation;
+    state.locations = state.locations.filter(l => l.id !== id);
+    if (state.settings.defaultLocationId === id) state.settings.defaultLocationId = '';
+    await saveAndSyncFullState();
+  });
+
+  document.getElementById('housesChipsContainer').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-remove-house]');
+    if (!btn) return;
+    const targetHouse = decodeURIComponent(btn.dataset.removeHouse || '');
+    state.houses = state.houses.filter(h => h.toLowerCase() !== targetHouse.toLowerCase());
+    await saveAndSyncFullState();
+  });
+
+  document.getElementById('slidesManageList').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-delete-slide]');
+    if (!btn) return;
+    const id = btn.dataset.deleteSlide;
+    state.slides = state.slides.filter(s => s.id !== id);
+    lastSlidesSignature = '';
+    initSlideshow();
+    await saveAndSyncFullState();
+  });
+
+  document.getElementById('tickersManageList').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-delete-ticker]');
+    if (!btn) return;
+    const idx = Number(btn.dataset.deleteTicker);
+    if (!Number.isNaN(idx)) {
+      state.announcements.splice(idx, 1);
+      await saveAndSyncFullState();
+    }
+  });
+
+  document.getElementById('adminAccountsList').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-delete-admin]');
+    if (!btn) return;
+    if (state.adminAccounts.length <= 1) return alert('ต้องมีบัญชีแอดมินอย่างน้อย 1 บัญชี');
+    const id = btn.dataset.deleteAdmin;
+    state.adminAccounts = state.adminAccounts.filter(a => a.id !== id);
+    await saveAndSyncFullState();
   });
 }
 
@@ -1604,6 +1777,7 @@ function renderAdminVisibility() {
 function isWithinFilter(isoStr) {
   if (!isoStr || state.filterMode === 'all') return true;
   const d = new Date(isoStr);
+  if (Number.isNaN(d.getTime())) return false;
   const now = new Date();
   if (state.filterMode === 'day') return d.toDateString() === now.toDateString();
   if (state.filterMode === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
@@ -1632,7 +1806,7 @@ window.createReportFromSelected = async function () {
   const reportedParcelIds = new Set();
 
   for (const req of state.requests) {
-    if (req.status === 'matched' && targets.includes(req.house)) {
+    if (req.status === 'matched' && targets.some(t => isSameHouse(t, req.house))) {
       const parcel = state.parcels.find(p => p.id === req.matchedParcelId);
       const loc = getLocationById(req.locationId);
       rows.push({
@@ -1645,6 +1819,7 @@ window.createReportFromSelected = async function () {
         time: formatDateTimeTH(req.createdAt)
       });
       req.status = 'reported';
+      req.matchedParcelId = null;
       if (parcel) reportedParcelIds.add(parcel.id);
     }
   }
@@ -1684,7 +1859,7 @@ function renderReportArea(reportObj) {
               <td>${i + 1}</td>
               <td><strong>${escapeHTML(r.house)}</strong></td>
               <td>${escapeHTML(r.location)}</td>
-              <td>${escapeHTML(r.courier)} ${r.tracking ? `(${escapeHTML(r.tracking)})` : ''}</td>
+              <td>${escapeHTML(r.courier)} ${r.tracking && r.tracking !== '-' ? `(${escapeHTML(r.tracking)})` : ''}</td>
               <td>${escapeHTML(r.phone)}</td>
               <td>${escapeHTML(r.note)}</td>
               <td style="min-width:90px;"></td>
@@ -1697,10 +1872,11 @@ function renderReportArea(reportObj) {
 }
 
 window.openPrintWindow = function () {
-  const html = document.getElementById('a4ReportPreviewArea')?.innerHTML || '';
+  const rawHtml = document.getElementById('a4ReportPreviewArea')?.innerHTML || '';
+  const safeHtml = rawHtml.replace(/<\/script>/gi, '<\\/script>');
   const win = window.open('', '_blank');
   if (!win) return alert('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป');
-  win.document.write(`<html><head><title>พิมพ์รายงาน A4</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #999;padding:6px;font-size:13px;}</style></head><body>${html}<script>window.onload=()=>window.print();<\/script></body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>พิมพ์รายงาน A4</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #999;padding:6px;font-size:13px;}</style></head><body>${safeHtml}<script>window.onload=()=>window.print();<\/script></body></html>`);
   win.document.close();
 };
 
@@ -1711,7 +1887,7 @@ window.exportReportToExcel = function () {
   const ws = XLSX.utils.json_to_sheet(latest.rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'ParcelReport');
-  XLSX.writeFile(wb, `parcel-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(wb, `parcel-report-${getLocalDateKey()}.xlsx`);
 };
 
 window.downloadParcelTemplate = function () {
@@ -1740,7 +1916,7 @@ window.exportAndClearPendingRequests = async function () {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'PendingRequests');
-    XLSX.writeFile(wb, `pending-requests-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `pending-requests-${getLocalDateKey()}.xlsx`);
   }
   if (confirm(`ส่งออกไฟล์แล้ว ต้องการเคลียร์คำขอที่ยังไม่มีพัสดุทั้ง ${pending.length} รายการออกจากหน้าจอหรือไม่?`)) {
     state.requests = state.requests.filter(r => r.status !== 'pending');
@@ -1761,7 +1937,7 @@ window.exportAllRequestsExcel = function () {
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'AllRequests');
-  XLSX.writeFile(wb, `all-requests-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(wb, `all-requests-${getLocalDateKey()}.xlsx`);
 };
 
 window.clearAllDailyParcels = async () => {
@@ -1800,7 +1976,7 @@ window.exportBackupJson = function () {
   const blob = new Blob([JSON.stringify(getCleanCloudPayloadState(), null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `parcel-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `parcel-backup-${getLocalDateKey()}.json`;
   a.click();
 };
 
@@ -1842,7 +2018,7 @@ function renderAdminData() {
           <td>${escapeHTML(p.tracking || '-')}</td>
           <td>${escapeHTML(p.note || '-')}</td>
           <td>${formatDateTimeTH(p.createdAt)}</td>
-          <td><button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteParcel('${p.id}')">ลบ</button></td>
+          <td><button type="button" class="btn btn-danger btn-sm" data-delete-parcel="${escapeHTML(p.id)}">ลบ</button></td>
         </tr>
       `).join('')
     : '<tr><td colspan="7" style="text-align:center; color:#64748b;">ยังไม่มีพัสดุประจำวัน</td></tr>';
@@ -1873,7 +2049,7 @@ function renderAdminData() {
               ${r.note ? `| หมายเหตุ: ${escapeHTML(r.note)}` : ''}
               <div style="font-size:12px; color:#64748b;">บันทึกเมื่อ: ${formatDateTimeTH(r.createdAt)}</div>
             </div>
-            <button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteRequest('${r.id}')">ลบ</button>
+            <button type="button" class="btn btn-danger btn-sm" data-delete-request="${escapeHTML(r.id)}">ลบ</button>
           </div>`;
       }).join('')
     : '<div style="color:#64748b;">ยังไม่มีคำขอรับพัสดุในระบบ</div>';
@@ -1882,7 +2058,7 @@ function renderAdminData() {
     ? state.reportHistory.map((rep, idx) => `
         <div style="padding:8px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
           <div><strong>${escapeHTML(rep.title)}</strong> — ${formatDateTimeTH(rep.createdAt)} (${rep.count} รายการ)</div>
-          <button type="button" class="btn btn-outline btn-sm" onclick="window.__viewReport(${idx})">ดู / พิมพ์ซ้ำ</button>
+          <button type="button" class="btn btn-outline btn-sm" data-view-report="${idx}">ดู / พิมพ์ซ้ำ</button>
         </div>
       `).join('')
     : '<div style="color:#64748b;">ยังไม่มีประวัติการออกรายงาน</div>';
@@ -1890,78 +2066,35 @@ function renderAdminData() {
   document.getElementById('locationsManageList').innerHTML = state.locations.map(l => `
     <li style="margin-bottom:6px;">
       <strong>${escapeHTML(l.name)}</strong> ${l.requirePhone ? '(บังคับเบอร์โทร)' : ''}
-      <button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteLocation('${l.id}')">ลบ</button>
+      <button type="button" class="btn btn-danger btn-sm" data-delete-location="${escapeHTML(l.id)}">ลบ</button>
     </li>
   `).join('');
 
   document.getElementById('housesChipsContainer').innerHTML = state.houses.map(h =>
-    `<span class="house-chip">${escapeHTML(h)} <button type="button" onclick="window.__removeHouse('${escapeHTML(h)}')">×</button></span>`
+    `<span class="house-chip">${escapeHTML(h)} <button type="button" data-remove-house="${encodeURIComponent(h)}">×</button></span>`
   ).join('');
 
   document.getElementById('slidesManageList').innerHTML = state.slides.map(s => `
     <div style="padding:8px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
       <div><strong>${escapeHTML(s.title)}</strong> — ${escapeHTML(s.subtitle || '')}</div>
-      <button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteSlide('${s.id}')">ลบ</button>
+      <button type="button" class="btn btn-danger btn-sm" data-delete-slide="${escapeHTML(s.id)}">ลบ</button>
     </div>
   `).join('');
 
   document.getElementById('tickersManageList').innerHTML = state.announcements.map((txt, idx) => `
     <li style="margin-bottom:6px;">
       ${escapeHTML(txt)}
-      <button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteTicker(${idx})">ลบ</button>
+      <button type="button" class="btn btn-danger btn-sm" data-delete-ticker="${idx}">ลบ</button>
     </li>
   `).join('');
 
   document.getElementById('adminAccountsList').innerHTML = state.adminAccounts.map(a => `
     <li style="margin-bottom:6px;">
       <strong>${escapeHTML(a.username)}</strong> (${escapeHTML(a.displayName)})
-      ${state.adminAccounts.length > 1 ? `<button type="button" class="btn btn-danger btn-sm" onclick="window.__deleteAdminAcc('${a.id}')">ลบ</button>` : ''}
+      ${state.adminAccounts.length > 1 ? `<button type="button" class="btn btn-danger btn-sm" data-delete-admin="${escapeHTML(a.id)}">ลบ</button>` : ''}
     </li>
   `).join('');
 }
-
-window.__viewReport = idx => {
-  if (state.reportHistory[idx]) renderReportArea(state.reportHistory[idx]);
-};
-window.__deleteParcel = async id => {
-  const parcel = state.parcels.find(p => p.id === id);
-  if (parcel && parcel.matchedReqId) {
-    const req = state.requests.find(r => r.id === parcel.matchedReqId);
-    if (req && req.status === 'matched') { req.status = 'pending'; req.matchedParcelId = null; }
-  }
-  state.parcels = state.parcels.filter(p => p.id !== id);
-  await saveAndSyncFullState();
-};
-window.__deleteRequest = async id => {
-  const req = state.requests.find(r => r.id === id);
-  if (req && req.matchedParcelId) {
-    const p = state.parcels.find(item => item.id === req.matchedParcelId);
-    if (p) p.matchedReqId = null;
-  }
-  state.requests = state.requests.filter(r => r.id !== id);
-  await saveAndSyncFullState();
-};
-window.__deleteLocation = async id => {
-  state.locations = state.locations.filter(l => l.id !== id);
-  await saveAndSyncFullState();
-};
-window.__removeHouse = async house => {
-  state.houses = state.houses.filter(h => h !== house);
-  await saveAndSyncFullState();
-};
-window.__deleteSlide = async id => {
-  state.slides = state.slides.filter(s => s.id !== id);
-  initSlideshow();
-  await saveAndSyncFullState();
-};
-window.__deleteTicker = async idx => {
-  state.announcements.splice(idx, 1);
-  await saveAndSyncFullState();
-};
-window.__deleteAdminAcc = async id => {
-  state.adminAccounts = state.adminAccounts.filter(a => a.id !== id);
-  await saveAndSyncFullState();
-};
 
 window.manualSyncNow = async () => {
   if (!getCloudUrl()) return alert('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "7. การตั้งค่า" ก่อนครับ');
@@ -1993,7 +2126,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderAdminVisibility();
   bindUserRequestForm();
   bindNavigationAndAdmin();
-  initSlideshow();
+  initSlideshowIfChanged();
   renderAll();
   if (state.reportHistory[0]) renderReportArea(state.reportHistory[0]);
 
