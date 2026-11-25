@@ -1637,8 +1637,8 @@ function bindNavigationAndAdmin() {
           state.parcels.unshift({
             id: uid('pcl'),
             house: normalizeHouseNumber(h),
-            courier: String(r.courier || r['ขนส่ง'] || 'พัสดุทั่วไป').trim(),
-            tracking: String(r.tracking || r['เลขพัสดุ'] || '').trim(),
+            courier: String(r.courier || r['เลขอ้างอิง'] || r['ขนส่ง'] || 'พัสดุทั่วไป').trim(),
+            tracking: String(r.tracking || r['ประเภท'] || r['เลขพัสดุ'] || '').trim(),
             note: String(r.note || r['หมายเหตุ'] || '').trim(),
             matchedReqId: null,
             createdAt: new Date().toISOString()
@@ -2077,7 +2077,7 @@ function renderReportArea(reportObj) {
       <table>
         <thead>
           <tr>
-            <th>ลำดับ</th><th>บ้านเลขที่</th><th>จุดรับ</th><th>ขนส่ง / เลขพัสดุ</th><th>เบอร์โทร</th><th>หมายเหตุ</th><th>ลายเซ็นผู้รับ</th>
+            <th>ลำดับ</th><th>บ้านเลขที่</th><th>จุดรับ</th><th>เลขอ้างอิง / ประเภท</th><th>เบอร์โทร</th><th>หมายเหตุ</th><th>ลายเซ็นผู้รับ</th>
           </tr>
         </thead>
         <tbody>
@@ -2120,8 +2120,8 @@ window.exportReportToExcel = function () {
 window.downloadParcelTemplate = function () {
   if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
   const sample = [
-    { 'บ้านเลขที่': '62/1', 'ขนส่ง': 'Flash Express', 'เลขพัสดุ': 'TH0123456789', 'หมายเหตุ': '' },
-    { 'บ้านเลขที่': '62/2', 'ขนส่ง': 'Kerry', 'เลขพัสดุ': 'KEX987654321', 'หมายเหตุ': '' }
+    { 'บ้านเลขที่': '62/1', 'เลขอ้างอิง': 'REF-001', 'ประเภท': 'กล่องพัสดุ', 'หมายเหตุ': '' },
+    { 'บ้านเลขที่': '62/2', 'เลขอ้างอิง': 'REF-002', 'ประเภท': 'ซองเอกสาร', 'หมายเหตุ': '' }
   ];
   const ws = XLSX.utils.json_to_sheet(sample);
   const wb = XLSX.utils.book_new();
