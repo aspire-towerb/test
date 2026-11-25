@@ -650,6 +650,7 @@
    1. STATE, STORAGE & FULL SETTINGS MODEL
    ========================================================= */
 const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V6';
+const CREDS_STORAGE_KEY = 'PARCEL_SYSTEM_CREDENTIALS_V1';
 const DEFAULT_CLOUD_URL = '';
 const MAX_SLIDE_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB (อัปโหลดขึ้น Google Drive)
 
@@ -742,16 +743,18 @@ function loadState() {
       reportHistory: Array.isArray(parsed.reportHistory) ? parsed.reportHistory : [],
       announcements: Array.isArray(parsed.announcements) ? parsed.announcements : base.announcements,
       slides: Array.isArray(parsed.slides) && parsed.slides.length ? parsed.slides : base.slides,
-      settings: {
+      settings: applySavedCredentialsToSettings({
         ...base.settings,
         ...(parsed.settings || {}),
         showSlideshow: parsed.settings && typeof parsed.settings.showSlideshow === 'boolean' ? parsed.settings.showSlideshow : true,
         showNoteField: parsed.settings && typeof parsed.settings.showNoteField === 'boolean' ? parsed.settings.showNoteField : true,
         cloudSyncUrl: (parsed.settings && parsed.settings.cloudSyncUrl) || DEFAULT_CLOUD_URL
-      }
+      })
     };
   } catch (err) {
-    return cloneDefault();
+    const fallback = cloneDefault();
+    fallback.settings = applySavedCredentialsToSettings(fallback.settings);
+    return fallback;
   }
 }
 
@@ -762,7 +765,73 @@ let isSyncing = false;
 let pollTimer = null;
 let lastSlidesSignature = '';
 
+function extractCredentialsFromSettings(s = {}) {
+  return {
+    cloudSyncUrl: String(s.cloudSyncUrl || '').trim(),
+    telegramToken: String(s.telegramToken || '').trim(),
+    telegramChatId: String(s.telegramChatId || '').trim(),
+    syncIntervalSec: Number(s.syncIntervalSec) || 10,
+    autoSyncOnLoad: s.autoSyncOnLoad !== false,
+    notifyTelegramOnReq: Boolean(s.notifyTelegramOnReq)
+  };
+}
+
+function saveCredentialsBackup(s = state.settings) {
+  const creds = extractCredentialsFromSettings(s);
+  try {
+    localStorage.setItem(CREDS_STORAGE_KEY, JSON.stringify(creds));
+  } catch (_) {}
+  try {
+    const winData = JSON.parse(window.name || '{}');
+    if (winData && typeof winData === 'object') {
+      winData[CREDS_STORAGE_KEY] = creds;
+      window.name = JSON.stringify(winData);
+    }
+  } catch (_) {
+    try {
+      window.name = JSON.stringify({ [CREDS_STORAGE_KEY]: creds });
+    } catch (_) {}
+  }
+}
+
+function loadCredentialsBackup() {
+  let creds = {};
+  try {
+    const rawLocal = localStorage.getItem(CREDS_STORAGE_KEY);
+    if (rawLocal) creds = { ...creds, ...JSON.parse(rawLocal) };
+  } catch (_) {}
+  try {
+    const rawWin = JSON.parse(window.name || '{}');
+    if (rawWin && rawWin[CREDS_STORAGE_KEY]) {
+      creds = {
+        ...rawWin[CREDS_STORAGE_KEY],
+        ...Object.fromEntries(
+          Object.entries(creds).filter(([, v]) => v !== '' && v !== null && v !== undefined)
+        )
+      };
+    }
+  } catch (_) {}
+  return creds;
+}
+
+function applySavedCredentialsToSettings(targetSettings) {
+  const backup = loadCredentialsBackup();
+  if (!backup || typeof backup !== 'object') return targetSettings;
+  if (!targetSettings.cloudSyncUrl && backup.cloudSyncUrl) targetSettings.cloudSyncUrl = backup.cloudSyncUrl;
+  if (!targetSettings.telegramToken && backup.telegramToken) targetSettings.telegramToken = backup.telegramToken;
+  if (!targetSettings.telegramChatId && backup.telegramChatId) targetSettings.telegramChatId = backup.telegramChatId;
+  if (!targetSettings.syncIntervalSec && backup.syncIntervalSec) targetSettings.syncIntervalSec = backup.syncIntervalSec;
+  if (typeof backup.autoSyncOnLoad === 'boolean' && targetSettings.autoSyncOnLoad === undefined) {
+    targetSettings.autoSyncOnLoad = backup.autoSyncOnLoad;
+  }
+  if (typeof backup.notifyTelegramOnReq === 'boolean' && targetSettings.notifyTelegramOnReq === undefined) {
+    targetSettings.notifyTelegramOnReq = backup.notifyTelegramOnReq;
+  }
+  return targetSettings;
+}
+
 function saveLocalState() {
+  saveCredentialsBackup(state.settings);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     return true;
@@ -835,16 +904,25 @@ function mergeRemoteState(remote) {
   if (Array.isArray(remote.requests)) state.requests = remote.requests;
   if (Array.isArray(remote.reportHistory)) state.reportHistory = remote.reportHistory;
   if (Array.isArray(remote.announcements) && remote.announcements.length) state.announcements = remote.announcements;
-  if (Array.isArray(remote.slides) && remote.slides.length) state.slides = remote.slides;
+  if (Array.isArray(remote.slides) && remote.slides.length) {
+    state.slides = remote.slides.map(s => ({
+      ...s,
+      imageUrl: normalizeImageSrc(s.imageUrl || '', s.driveFileId || '') || (s.imageUrl || '')
+    }));
+  }
+  const prevCreds = extractCredentialsFromSettings(state.settings);
   if (remote.settings && typeof remote.settings === 'object') {
     state.settings = {
       ...state.settings,
       ...remote.settings,
       showSlideshow: typeof remote.settings.showSlideshow === 'boolean' ? remote.settings.showSlideshow : true,
       showNoteField: typeof remote.settings.showNoteField === 'boolean' ? remote.settings.showNoteField : true,
-      cloudSyncUrl: localUrl || remote.settings.cloudSyncUrl || ''
+      cloudSyncUrl: localUrl || prevCreds.cloudSyncUrl || remote.settings.cloudSyncUrl || '',
+      telegramToken: String(remote.settings.telegramToken || '').trim() || prevCreds.telegramToken || '',
+      telegramChatId: String(remote.settings.telegramChatId || '').trim() || prevCreds.telegramChatId || ''
     };
   }
+  applySavedCredentialsToSettings(state.settings);
 
   state.isAdminLoggedIn = localAuth;
   state.currentAdminUser = localAdminUser;
@@ -1142,6 +1220,50 @@ function initSlideshowIfChanged() {
   initSlideshow();
 }
 
+function normalizeImageSrc(rawUrl, driveFileId = '') {
+  const val = String(rawUrl || '').trim();
+  const idFromField = String(driveFileId || '').trim();
+
+  if (val.startsWith('data:image/') || val.startsWith('blob:') || val.startsWith('http://') || val.startsWith('https://')) {
+    const driveFileMatch = val.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveFileMatch && driveFileMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${driveFileMatch[1]}`;
+    }
+    const driveUcMatch = val.match(/drive\.google\.com\/uc\?.*[?&]id=([a-zA-Z0-9_-]+)/);
+    if (driveUcMatch && driveUcMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${driveUcMatch[1]}`;
+    }
+    const driveOpenMatch = val.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (val.includes('drive.google.com') && driveOpenMatch && driveOpenMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${driveOpenMatch[1]}`;
+    }
+    return val;
+  }
+
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(val)) {
+    return `https://lh3.googleusercontent.com/d/${val}`;
+  }
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(idFromField)) {
+    return `https://lh3.googleusercontent.com/d/${idFromField}`;
+  }
+  return '';
+}
+
+window.handleSlideImageError = function(imgEl) {
+  if (!imgEl) return;
+  const fallbackSrc = imgEl.dataset.fallbackSrc || '';
+  const triedFallback = imgEl.dataset.triedFallback === '1';
+  if (fallbackSrc && !triedFallback && imgEl.src !== fallbackSrc) {
+    imgEl.dataset.triedFallback = '1';
+    imgEl.src = fallbackSrc;
+    return;
+  }
+  const box = imgEl.closest('.slide-image-box');
+  if (box) {
+    box.innerHTML = '<div style="padding:14px; font-size:13px; color:var(--muted);">ไม่สามารถโหลดรูปภาพได้ (กรุณาตรวจสอบสิทธิ์การแชร์ลิงก์หรืออัปโหลดรูปใหม่อีกครั้ง)</div>';
+  }
+};
+
 function initSlideshow() {
   const track = document.getElementById('slideshowTrack');
   const dotsWrap = document.getElementById('slideshowDots');
@@ -1149,10 +1271,13 @@ function initSlideshow() {
   const slides = state.slides && state.slides.length ? state.slides : defaultState.slides;
 
   track.innerHTML = slides.map((s, i) => {
-    const safeUrl = (s.imageUrl || '').trim();
+    const safeUrl = normalizeImageSrc(s.imageUrl || '', s.driveFileId || '');
+    const rawTrimmed = (s.imageUrl || '').trim();
+    const driveId = (s.driveFileId || '').trim();
+    const fallbackUrl = driveId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w1200` : (rawTrimmed.startsWith('http') ? rawTrimmed : '');
     const separateImageCard = safeUrl
       ? `<div class="slide-image-box">
-           <img src="${escapeHTML(safeUrl)}" alt="${escapeHTML(s.title)}" onerror="this.parentElement.style.display='none'" />
+           <img src="${escapeHTML(safeUrl)}" data-fallback-src="${escapeHTML(fallbackUrl)}" alt="${escapeHTML(s.title)}" loading="eager" referrerpolicy="no-referrer" onerror="window.handleSlideImageError(this)" />
          </div>`
       : '';
 
@@ -1651,12 +1776,21 @@ function bindNavigationAndAdmin() {
         submitBtn.disabled = true;
         submitBtn.textContent = file ? 'กำลังอัปโหลดรูปขึ้น Google Drive...' : 'กำลังบันทึก...';
       }
-      let imgSrc = urlVal;
+      let imgSrc = normalizeImageSrc(urlVal);
       let driveFileId = '';
       if (file) {
-        const uploaded = await uploadSlideImageToDrive(file);
-        imgSrc = uploaded.imageUrl;
-        driveFileId = uploaded.driveFileId;
+        if (getCloudUrl()) {
+          try {
+            const uploaded = await uploadSlideImageToDrive(file);
+            imgSrc = uploaded.imageUrl;
+            driveFileId = uploaded.driveFileId;
+          } catch (driveErr) {
+            console.warn('Drive upload fallback to local dataUrl:', driveErr);
+            imgSrc = await readImageFileAsDataUrl(file);
+          }
+        } else {
+          imgSrc = await readImageFileAsDataUrl(file);
+        }
       }
       state.slides.push({ id: uid('sld'), title, subtitle, imageUrl: imgSrc, driveFileId });
       e.target.reset();
@@ -1751,12 +1885,28 @@ function bindNavigationAndAdmin() {
     state.settings.autoSyncOnLoad = document.getElementById('settingAutoSyncOnLoad').checked;
     state.settings.notifyTelegramOnReq = document.getElementById('settingNotifyTelegramOnReq').checked;
 
+    saveCredentialsBackup(state.settings);
     applyBrandingAndVisibility();
     lastSlidesSignature = '';
     initSlideshow();
     startCloudPolling();
     await saveAndSyncFullState();
     alert('บันทึกการตั้งค่าทั้งหมดเรียบร้อยแล้ว!');
+  });
+
+  ['settingCloudSyncUrl', 'settingTelegramToken', 'settingTelegramChatId', 'settingSyncSec'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', () => {
+        saveCredentialsBackup({
+          ...state.settings,
+          cloudSyncUrl: document.getElementById('settingCloudSyncUrl')?.value.trim() || '',
+          telegramToken: document.getElementById('settingTelegramToken')?.value.trim() || '',
+          telegramChatId: document.getElementById('settingTelegramChatId')?.value.trim() || '',
+          syncIntervalSec: Number(document.getElementById('settingSyncSec')?.value) || 10
+        });
+      });
+    }
   });
 
   // Event Delegation for dynamic lists & buttons
