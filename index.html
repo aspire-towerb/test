@@ -2036,10 +2036,13 @@ window.createReportFromSelected = async function () {
     if (req.status === 'matched' && targets.some(t => isSameHouse(t, req.house))) {
       const parcel = state.parcels.find(p => p.id === req.matchedParcelId);
       const loc = getLocationById(req.locationId);
+      const showPhoneCol = Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false && req.phone);
       rows.push({
         house: req.house,
         location: loc ? loc.name : '-',
-        phone: req.phone || '-',
+        requirePhone: Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false),
+        showPhone: showPhoneCol,
+        phone: showPhoneCol ? req.phone : '-',
         courier: parcel ? parcel.courier : '-',
         tracking: parcel ? parcel.tracking : '-',
         note: req.note || parcel?.note || '-',
@@ -2052,11 +2055,13 @@ window.createReportFromSelected = async function () {
   }
 
   state.parcels = state.parcels.filter(p => !reportedParcelIds.has(p.id));
+  const includePhoneColumn = rows.some(r => r.showPhone || r.requirePhone);
   const reportObj = {
     id: uid('rep'),
     title: `รายงานจ่ายพัสดุ (${targets.join(', ')})`,
     houses: targets,
     count: rows.length,
+    includePhoneColumn,
     createdAt: new Date().toISOString(),
     rows
   };
@@ -2068,6 +2073,11 @@ window.createReportFromSelected = async function () {
 function renderReportArea(reportObj) {
   const area = document.getElementById('a4ReportPreviewArea');
   if (!area || !reportObj) return;
+  const rows = Array.isArray(reportObj.rows) ? reportObj.rows : [];
+  const showPhoneCol = typeof reportObj.includePhoneColumn === 'boolean'
+    ? reportObj.includePhoneColumn
+    : rows.some(r => Boolean(r.showPhone) || (r.phone && r.phone !== '-'));
+
   area.innerHTML = `
     <div style="background:#fff; padding:20px; border:1px solid #cbd5e1; border-radius:8px;">
       <h3 style="margin:0 0 6px;">${escapeHTML(reportObj.title)}</h3>
@@ -2077,17 +2087,17 @@ function renderReportArea(reportObj) {
       <table>
         <thead>
           <tr>
-            <th>ลำดับ</th><th>บ้านเลขที่</th><th>จุดรับ</th><th>เลขอ้างอิง / ประเภท</th><th>เบอร์โทร</th><th>หมายเหตุ</th><th>ลายเซ็นผู้รับ</th>
+            <th>ลำดับ</th><th>บ้านเลขที่</th><th>จุดรับ</th><th>เลขอ้างอิง / ประเภท</th>${showPhoneCol ? '<th>เบอร์โทร</th>' : ''}<th>หมายเหตุ</th><th>ลายเซ็นผู้รับ</th>
           </tr>
         </thead>
         <tbody>
-          ${reportObj.rows.map((r, i) => `
+          ${rows.map((r, i) => `
             <tr>
               <td>${i + 1}</td>
               <td><strong>${escapeHTML(r.house)}</strong></td>
               <td>${escapeHTML(r.location)}</td>
               <td>${escapeHTML(r.courier)} ${r.tracking && r.tracking !== '-' ? `(${escapeHTML(r.tracking)})` : ''}</td>
-              <td>${escapeHTML(r.phone)}</td>
+              ${showPhoneCol ? `<td>${escapeHTML(r.phone || '-')}</td>` : ''}
               <td>${escapeHTML(r.note)}</td>
               <td style="min-width:90px;"></td>
             </tr>
@@ -2111,7 +2121,23 @@ window.exportReportToExcel = function () {
   if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
   const latest = state.reportHistory[0];
   if (!latest || !latest.rows.length) return alert('ยังไม่มีข้อมูลรายงาน');
-  const ws = XLSX.utils.json_to_sheet(latest.rows);
+  const showPhoneCol = typeof latest.includePhoneColumn === 'boolean'
+    ? latest.includePhoneColumn
+    : latest.rows.some(r => Boolean(r.showPhone) || (r.phone && r.phone !== '-'));
+  const exportRows = latest.rows.map((r, idx) => {
+    const item = {
+      'ลำดับ': idx + 1,
+      'บ้านเลขที่': r.house,
+      'จุดรับ': r.location,
+      'เลขอ้างอิง': r.courier,
+      'ประเภท': r.tracking
+    };
+    if (showPhoneCol) item['เบอร์โทร'] = r.phone || '-';
+    item['หมายเหตุ'] = r.note || '-';
+    item['เวลาบันทึก'] = r.time || '-';
+    return item;
+  });
+  const ws = XLSX.utils.json_to_sheet(exportRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'ParcelReport');
   XLSX.writeFile(wb, `parcel-report-${getLocalDateKey()}.xlsx`);
