@@ -7,14 +7,15 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
-      --primary: #1d4ed8;
-      --primary-dark: #1e3a8a;
-      --bg: #f1f5f9;
+      --primary: #016D7F;
+      --primary-dark: #004A4F;
+      --accent: #199BA7;
+      --bg: #f1f4f6;
       --card: #ffffff;
-      --text: #0f172a;
-      --muted: #64748b;
-      --border: #e2e8f0;
-      --success: #15803d;
+      --text: #004A4F;
+      --muted: #7F808A;
+      --border: #C5CACC;
+      --success: #016D7F;
       --danger: #b91c1c;
     }
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
@@ -34,6 +35,19 @@
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: #fff; }
     .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+    .btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--primary); background: #f4fafb; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(25, 155, 167, 0.16); }
+    .ticker-bar {
+      background: #f0f9fa; border: 1px solid var(--accent); padding: 10px 14px; border-radius: 10px;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px;
+      font-size: 14px; color: var(--primary-dark);
+    }
+    .project-banner-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #e6f4f6; color: var(--primary-dark); border: 1px solid var(--border);
+      padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      margin-bottom: 8px;
+    }
     .btn-success { background: var(--success); color: #fff; }
     .btn-light { background: rgba(255,255,255,0.18); color: #fff; }
     .btn-light.active { background: #fff; color: var(--primary-dark); }
@@ -90,11 +104,6 @@
     .slide-dot { width: 8px; height: 8px; border-radius: 50%; border: none; background: #cbd5e1; cursor: pointer; padding: 0; }
     .slide-dot.active { background: var(--primary); width: 18px; border-radius: 99px; }
     /* Ticker & Latest Box */
-    .ticker-bar {
-      background: #fef9c3; border: 1px solid #fde047; padding: 10px 14px; border-radius: 10px;
-      display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px;
-      font-size: 14px;
-    }
     #latestRequestBlueBox {
       display: none; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 10px;
       padding: 14px; margin-top: 14px;
@@ -112,10 +121,10 @@
     .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
     .chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .house-chip {
-      background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 999px;
+      background: #e6f4f6; color: var(--primary-dark); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px;
       font-size: 13px; display: inline-flex; align-items: center; gap: 6px;
     }
-    .house-chip button { border: none; background: none; color: #0369a1; cursor: pointer; font-weight: bold; }
+    .house-chip button { border: none; background: none; color: var(--primary); cursor: pointer; font-weight: bold; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
     .badge-pending { background: #fef3c7; color: #92400e; }
     .badge-matched { background: #dcfce7; color: #166534; }
@@ -157,6 +166,7 @@
     </div>
 
     <div class="card">
+      <div id="userProjectNameBadge" class="project-banner-badge">โครงการ: นิติบุคคลอาคารชุด / หมู่บ้าน</div>
       <h2 id="userFormHeading">แบบฟอร์มแจ้งขอรับพัสดุ</h2>
       <p id="userFormSubtitle" style="margin-top:-6px; margin-bottom:14px; font-size:13px; color:var(--muted);"></p>
       <form id="userRequestForm">
@@ -1089,9 +1099,15 @@ function readImageFileAsDataUrl(file) {
    ========================================================= */
 function applyBrandingAndVisibility() {
   const s = state.settings;
+  const projectLabel = (s.projectName || 'นิติบุคคลอาคารชุด / หมู่บ้าน').trim();
+  const projectBadge = document.getElementById('userProjectNameBadge');
+  if (projectBadge) {
+    projectBadge.textContent = `โครงการ: ${projectLabel}`;
+    projectBadge.style.display = projectLabel ? 'inline-flex' : 'none';
+  }
   const headerTitle = document.getElementById('headerSystemTitle');
   if (headerTitle) {
-    headerTitle.textContent = s.headerTitle || `ระบบแจ้งรับและจัดการพัสดุ — ${s.projectName || ''}`;
+    headerTitle.textContent = s.headerTitle || `ระบบแจ้งรับและจัดการพัสดุ — ${projectLabel}`;
   }
   const heading = document.getElementById('userFormHeading');
   if (heading) heading.textContent = s.userFormHeading || 'แบบฟอร์มแจ้งขอรับพัสดุ';
