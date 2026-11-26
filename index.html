@@ -635,7 +635,10 @@
 
           <!-- ปุ่มบันทึกและรีเซ็ตการตั้งค่า -->
           <div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <button type="button" class="btn btn-danger" onclick="resetDefaultSettings()">คืนค่าการตั้งค่าเริ่มต้น</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline" onclick="saveCurrentAsDefaultSettings()">ตั้งค่าปัจจุบันเป็นค่าเริ่มต้น</button>
+              <button type="button" class="btn btn-danger" onclick="resetDefaultSettings()">คืนค่าการตั้งค่าเริ่มต้น</button>
+            </div>
             <button type="submit" class="btn btn-primary">บันทึกการตั้งค่าทั้งหมด & ซิงค์ทันที</button>
           </div>
 
@@ -987,6 +990,12 @@ function mergeRemoteState(remote) {
   if (Array.isArray(remote.requests)) state.requests = remote.requests;
   if (Array.isArray(remote.reportHistory)) state.reportHistory = remote.reportHistory;
   if (Array.isArray(remote.announcements) && remote.announcements.length) state.announcements = remote.announcements;
+  if (remote.customDefaultSettings && typeof remote.customDefaultSettings === 'object') {
+    state.customDefaultSettings = remote.customDefaultSettings;
+    try {
+      localStorage.setItem(CUSTOM_DEFAULT_SETTINGS_KEY, JSON.stringify(remote.customDefaultSettings));
+    } catch (_) {}
+  }
   if (Array.isArray(remote.slides) && remote.slides.length) {
     state.slides = remote.slides.map(s => ({
       ...s,
@@ -1594,10 +1603,39 @@ function populateSettingsForm() {
   document.getElementById('settingNotifyTelegramOnReq').checked = Boolean(s.notifyTelegramOnReq);
 }
 
+const CUSTOM_DEFAULT_SETTINGS_KEY = 'PARCEL_SYSTEM_CUSTOM_DEFAULT_SETTINGS_V1';
+
+function getBaselineDefaultSettings() {
+  let saved = state.customDefaultSettings;
+  if (!saved || typeof saved !== 'object') {
+    try {
+      const raw = localStorage.getItem(CUSTOM_DEFAULT_SETTINGS_KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch (_) {}
+  }
+  const base = cloneDefault().settings;
+  if (saved && typeof saved === 'object') {
+    return { ...base, ...saved };
+  }
+  return base;
+}
+
+window.saveCurrentAsDefaultSettings = async function () {
+  if (!confirm('ยืนยันบันทึกการตั้งค่าปัจจุบันทั้งหมดให้เป็น "ค่าเริ่มต้นใหม่" ของระบบหรือไม่?')) return;
+  const snapshot = JSON.parse(JSON.stringify(state.settings || {}));
+  state.customDefaultSettings = snapshot;
+  try {
+    localStorage.setItem(CUSTOM_DEFAULT_SETTINGS_KEY, JSON.stringify(snapshot));
+  } catch (_) {}
+  await saveAndSyncFullState();
+  alert('บันทึกการตั้งค่าปัจจุบันเป็นค่าเริ่มต้นใหม่เรียบร้อยแล้วครับ');
+};
+
 window.resetDefaultSettings = async function () {
   if (!confirm('ยืนยันคืนค่าการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น?')) return;
   const keepUrl = state.settings.cloudSyncUrl;
-  state.settings = { ...cloneDefault().settings, cloudSyncUrl: keepUrl };
+  const baseline = getBaselineDefaultSettings();
+  state.settings = { ...baseline, cloudSyncUrl: keepUrl || baseline.cloudSyncUrl || DEFAULT_CLOUD_URL };
   populateSettingsForm();
   applyBrandingAndVisibility();
   lastSlidesSignature = '';
