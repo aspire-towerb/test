@@ -1117,10 +1117,20 @@ async function saveAndSyncFullState() {
   await pushActionToCloud({ action: 'SAVE_FULL_STATE', state: getCleanCloudPayloadState() });
 }
 
-async function sendTelegramMessage(text) {
+let lastTelegramAlertMeta = { key: '', sentAt: 0 };
+
+async function sendTelegramMessage(text, dedupKey = '') {
   const token = (state.settings.telegramToken || '').trim();
   const chatId = (state.settings.telegramChatId || '').trim();
   if (!token || !chatId) return false;
+
+  const guardKey = dedupKey || text;
+  const now = Date.now();
+  if (lastTelegramAlertMeta.key === guardKey && (now - lastTelegramAlertMeta.sentAt) < 10000) {
+    return true;
+  }
+  lastTelegramAlertMeta = { key: guardKey, sentAt: now };
+
   try {
     const data = await fetchJsonWithCheck(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
       method: 'POST',
@@ -1579,8 +1589,11 @@ function bindUserRequestForm() {
   if (closeBtn && blueBox) closeBtn.addEventListener('click', () => (blueBox.style.display = 'none'));
 
   if (!form) return;
+  let isSubmittingReq = false;
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    if (isSubmittingReq) return;
+    const submitBtn = form.querySelector('button[type="submit"]');
     const house = normalizeHouseNumber(document.getElementById('reqHouseInput')?.value || '');
     const locationId = document.getElementById('reqLocationSelect')?.value || '';
     const loc = getLocationById(locationId);
@@ -1595,36 +1608,52 @@ function bindUserRequestForm() {
       return alert(`กรุณากรอกเบอร์โทรศัพท์สำหรับจุดรับ "${loc.name}"`);
     }
 
-    const reqItem = {
-      id: uid('req'),
-      house,
-      locationId,
-      phone,
-      note,
-      status: 'pending',
-      matchedParcelId: null,
-      createdAt: new Date().toISOString()
-    };
-
-    state.requests.unshift(reqItem);
-    runAutoMatching();
-    saveLocalState();
-    renderAll();
-
-    const synced = await pushActionToCloud({ action: 'ADD_REQUEST', request: reqItem });
-    const latest = state.requests.find(r => r.id === reqItem.id) || reqItem;
-    showLatestRequestBox(latest, loc, synced);
-
-    if (state.settings.notifyTelegramOnReq) {
-      await sendTelegramMessage(
-        `📦 คำขอรับพัสดุใหม่\nบ้านเลขที่: ${latest.house}\nจุดรับ: ${loc.name}\nสถานะ: ${latest.status}` +
-        `${latest.phone ? `\nโทร: ${latest.phone}` : ''}${latest.note ? `\nหมายเหตุ: ${latest.note}` : ''}`
-      );
+    isSubmittingReq = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'กำลังบันทึก...';
     }
 
-    form.reset();
-    renderUserFormOptions();
-    syncPhoneFieldRequirement();
+    try {
+      const reqItem = {
+        id: uid('req'),
+        house,
+        locationId,
+        phone,
+        note,
+        status: 'pending',
+        matchedParcelId: null,
+        createdAt: new Date().toISOString()
+      };
+
+      state.requests.unshift(reqItem);
+      runAutoMatching();
+      saveLocalState();
+      renderAll();
+
+      const synced = await pushActionToCloud({ action: 'ADD_REQUEST', request: reqItem });
+      const latest = state.requests.find(r => r.id === reqItem.id) || reqItem;
+      showLatestRequestBox(latest, loc, synced);
+
+      if (state.settings.notifyTelegramOnReq) {
+        const statusLabel = latest.status === 'matched' ? 'จับคู่พัสดุแล้ว (matched)' : 'รอพัสดุ (pending)';
+        await sendTelegramMessage(
+          `📦 คำขอรับพัสดุใหม่\nบ้านเลขที่: ${latest.house}\nจุดรับ: ${loc.name}\nสถานะ: ${statusLabel}` +
+          `${latest.phone ? `\nโทร: ${latest.phone}` : ''}${latest.note ? `\nหมายเหตุ: ${latest.note}` : ''}`,
+          `req_${latest.id}`
+        );
+      }
+
+      form.reset();
+      renderUserFormOptions();
+      syncPhoneFieldRequirement();
+    } finally {
+      isSubmittingReq = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'บันทึกคำขอรับพัสดุ';
+      }
+    }
   });
 }
 
