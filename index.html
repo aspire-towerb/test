@@ -996,6 +996,12 @@ function mergeRemoteState(remote) {
       localStorage.setItem(CUSTOM_DEFAULT_SETTINGS_KEY, JSON.stringify(remote.customDefaultSettings));
     } catch (_) {}
   }
+  if (remote.importedFilesRecord && typeof remote.importedFilesRecord === 'object') {
+    state.importedFilesRecord = { ...(state.importedFilesRecord || {}), ...remote.importedFilesRecord };
+    try {
+      localStorage.setItem(IMPORTED_FILES_KEY, JSON.stringify(state.importedFilesRecord));
+    } catch (_) {}
+  }
   if (Array.isArray(remote.slides) && remote.slides.length) {
     state.slides = remote.slides.map(s => ({
       ...s,
@@ -1246,6 +1252,64 @@ function checkAutoClearTimers() {
   }
 
   if (changed) saveAndSyncFullState();
+}
+
+const IMPORTED_FILES_KEY = 'PARCEL_SYSTEM_IMPORTED_FILES_V1';
+
+function getImportedFilesRecord() {
+  let rec = state.importedFilesRecord;
+  if (!rec || typeof rec !== 'object') {
+    try {
+      const raw = localStorage.getItem(IMPORTED_FILES_KEY);
+      if (raw) rec = JSON.parse(raw);
+    } catch (_) {}
+  }
+  return (rec && typeof rec === 'object') ? rec : {};
+}
+
+function saveImportedFileSignature(category, file) {
+  if (!file) return;
+  const key = `${category}::${file.name}::${file.size}::${file.lastModified || 0}`;
+  const rec = getImportedFilesRecord();
+  rec[key] = new Date().toISOString();
+  state.importedFilesRecord = rec;
+  try {
+    localStorage.setItem(IMPORTED_FILES_KEY, JSON.stringify(rec));
+  } catch (_) {}
+}
+
+function isDuplicateImportedFile(category, file) {
+  if (!file) return false;
+  const key = `${category}::${file.name}::${file.size}::${file.lastModified || 0}`;
+  const rec = getImportedFilesRecord();
+  return Boolean(rec[key]);
+}
+
+function isDuplicateParcelEntry(house, courier, tracking, note) {
+  const h = String(house || '').trim().toLowerCase();
+  const c = String(courier || '').trim().toLowerCase();
+  const t = String(tracking || '').trim().toLowerCase();
+  const n = String(note || '').trim().toLowerCase();
+  return state.parcels.some(p =>
+    String(p.house || '').trim().toLowerCase() === h &&
+    String(p.courier || '').trim().toLowerCase() === c &&
+    String(p.tracking || '').trim().toLowerCase() === t &&
+    String(p.note || '').trim().toLowerCase() === n
+  );
+}
+
+function isDuplicateRequestEntry(house, locationId, phone, note) {
+  const h = String(house || '').trim().toLowerCase();
+  const loc = String(locationId || '').trim();
+  const ph = String(phone || '').trim();
+  const n = String(note || '').trim().toLowerCase();
+  return state.requests.some(r =>
+    r.status !== 'reported' &&
+    String(r.house || '').trim().toLowerCase() === h &&
+    String(r.locationId || '').trim() === loc &&
+    String(r.phone || '').trim() === ph &&
+    String(r.note || '').trim().toLowerCase() === n
+  );
 }
 
 function readImageFileAsDataUrl(file) {
@@ -1745,6 +1809,13 @@ function bindNavigationAndAdmin() {
       e.target.value = '';
       return alert('ไม่พบไลบรารี SheetJS สำหรับอ่านไฟล์ Excel');
     }
+    if (isDuplicateImportedFile('parcels', file)) {
+      const proceed = confirm(`ไฟล์ "${file.name}" เคยถูกนำเข้าพัสดุไปแล้ว ต้องการนำเข้าซ้ำหรือไม่?`);
+      if (!proceed) {
+        e.target.value = '';
+        return;
+      }
+    }
     const reader = new FileReader();
     reader.onload = async evt => {
       try {
@@ -1752,22 +1823,32 @@ function bindNavigationAndAdmin() {
         if (!wb.SheetNames || !wb.SheetNames.length) throw new Error('ไม่พบแผ่นงานในไฟล์');
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
         let count = 0;
+        let skippedDup = 0;
         for (const r of rows) {
           const h = r.house || r['บ้านเลขที่'] || r['ห้อง'] || '';
           if (!String(h).trim()) continue;
+          const normHouse = normalizeHouseNumber(h);
+          const courierVal = String(r.courier || r['เลขอ้างอิง'] || r['ขนส่ง'] || 'พัสดุทั่วไป').trim();
+          const trackingVal = String(r.tracking || r['ประเภท'] || r['เลขพัสดุ'] || '').trim();
+          const noteVal = String(r.note || r['หมายเหตุ'] || '').trim();
+          if (isDuplicateParcelEntry(normHouse, courierVal, trackingVal, noteVal)) {
+            skippedDup += 1;
+            continue;
+          }
           state.parcels.unshift({
             id: uid('pcl'),
-            house: normalizeHouseNumber(h),
-            courier: String(r.courier || r['เลขอ้างอิง'] || r['ขนส่ง'] || 'พัสดุทั่วไป').trim(),
-            tracking: String(r.tracking || r['ประเภท'] || r['เลขพัสดุ'] || '').trim(),
-            note: String(r.note || r['หมายเหตุ'] || '').trim(),
+            house: normHouse,
+            courier: courierVal,
+            tracking: trackingVal,
+            note: noteVal,
             matchedReqId: null,
             createdAt: new Date().toISOString()
           });
           count += 1;
         }
+        saveImportedFileSignature('parcels', file);
         await saveAndSyncFullState();
-        alert(`นำเข้าพัสดุสำเร็จ ${count} รายการ`);
+        alert(`นำเข้าพัสดุสำเร็จ ${count} รายการ${skippedDup ? ` (ข้ามรายการซ้ำ ${skippedDup} รายการ)` : ''}`);
       } catch (err) {
         console.error(err);
         alert('ไม่สามารถอ่านไฟล์ Excel/CSV ได้ กรุณาตรวจสอบรูปแบบไฟล์');
@@ -1808,6 +1889,13 @@ function bindNavigationAndAdmin() {
       e.target.value = '';
       return alert('ไม่พบไลบรารี SheetJS สำหรับอ่านไฟล์ Excel');
     }
+    if (isDuplicateImportedFile('requests', file)) {
+      const proceed = confirm(`ไฟล์ "${file.name}" เคยถูกนำเข้าคำขอไปแล้ว ต้องการนำเข้าซ้ำหรือไม่?`);
+      if (!proceed) {
+        e.target.value = '';
+        return;
+      }
+    }
     const reader = new FileReader();
     reader.onload = async evt => {
       try {
@@ -1815,25 +1903,35 @@ function bindNavigationAndAdmin() {
         if (!wb.SheetNames || !wb.SheetNames.length) throw new Error('ไม่พบแผ่นงานในไฟล์');
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
         let count = 0;
+        let skippedDup = 0;
         for (const r of rows) {
           const h = r.house || r['บ้านเลขที่'] || '';
           if (!String(h).trim()) continue;
+          const normHouse = normalizeHouseNumber(h);
           const locName = String(r.location || r['จุดรับ'] || '').trim();
           const locObj = state.locations.find(l => l.name.includes(locName)) || state.locations[0];
+          const locId = locObj ? locObj.id : '';
+          const phoneVal = String(r.phone || r['เบอร์โทร'] || '').trim();
+          const noteVal = String(r.note || r['หมายเหตุ'] || '').trim();
+          if (isDuplicateRequestEntry(normHouse, locId, phoneVal, noteVal)) {
+            skippedDup += 1;
+            continue;
+          }
           state.requests.unshift({
             id: uid('req'),
-            house: normalizeHouseNumber(h),
-            locationId: locObj ? locObj.id : '',
-            phone: String(r.phone || r['เบอร์โทร'] || '').trim(),
-            note: String(r.note || r['หมายเหตุ'] || '').trim(),
+            house: normHouse,
+            locationId: locId,
+            phone: phoneVal,
+            note: noteVal,
             status: 'pending',
             matchedParcelId: null,
             createdAt: new Date().toISOString()
           });
           count += 1;
         }
+        saveImportedFileSignature('requests', file);
         await saveAndSyncFullState();
-        alert(`นำเข้าคำขอสำเร็จ ${count} รายการ`);
+        alert(`นำเข้าคำขอสำเร็จ ${count} รายการ${skippedDup ? ` (ข้ามรายการซ้ำ ${skippedDup} รายการ)` : ''}`);
       } catch (err) {
         console.error(err);
         alert('ไม่สามารถอ่านไฟล์ Excel/CSV ได้ กรุณาตรวจสอบรูปแบบไฟล์');
