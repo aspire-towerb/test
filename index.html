@@ -128,10 +128,28 @@
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
     th { background: #f1f5f9; }
+    .report-sheet-block {
+      background: #fff;
+      padding: 20px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      margin-bottom: 18px;
+    }
     @media print {
       body * { visibility: hidden; }
       #a4ReportPreviewArea, #a4ReportPreviewArea * { visibility: visible; }
       #a4ReportPreviewArea { position: absolute; left: 0; top: 0; width: 100%; }
+      .report-sheet-block {
+        border: none;
+        padding: 0;
+        margin-bottom: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+      .report-sheet-block:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
     }
   </style>
 </head>
@@ -303,7 +321,7 @@
             </div>
             <div>
               <label for="parcelCourierInput">เลขอ้างอิง</label>
-              <input id="parcelCourierInput" placeholder="เช่น REF-001 หรือ Flash" />
+              <input id="parcelCourierInput" placeholder="เช่น 6911-00001 หรือ REF-001" />
             </div>
             <div>
               <label for="parcelTrackingInput">ประเภท</label>
@@ -342,8 +360,9 @@
 
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-            <h3 style="margin:0;">ประวัติคำขอรับพัสดุทั้งหมด</h3>
+            <h3 style="margin:0;">ประวัติคำขอรับพัสดุทั้งหมด (รวมตามบ้านเลขที่)</h3>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline btn-sm" onclick="downloadRequestTemplate()">ดาวน์โหลดเทมเพลตคำขอ (.xlsx)</button>
               <button type="button" class="btn btn-outline btn-sm" onclick="exportAllRequestsExcel()">ส่งออกคำขอ (.xlsx)</button>
               <label class="btn btn-outline btn-sm" style="margin:0; cursor:pointer;">
                 นำเข้าคำขอ (.xlsx)
@@ -1355,6 +1374,34 @@ function formatDateTimeTH(isoStr) {
   });
 }
 
+function compareHouseNumbers(a, b) {
+  return String(a || '').localeCompare(String(b || ''), 'th', { numeric: true, sensitivity: 'base' });
+}
+
+function formatLast5Ref(refVal) {
+  const raw = String(refVal || '').trim();
+  if (!raw || raw === '-') return '-';
+  return raw.length > 5 ? raw.slice(-5) : raw;
+}
+
+function formatReportHouse4Digits(houseVal) {
+  const raw = String(houseVal || '').trim();
+  if (!raw || raw === '-') return '-';
+  if (raw.includes('/')) {
+    const slashIdx = raw.indexOf('/');
+    const prefix = raw.slice(0, slashIdx + 1);
+    const suffix = raw.slice(slashIdx + 1).trim();
+    if (/^\d+$/.test(suffix)) {
+      return `${prefix}${suffix.padStart(4, '0')}`;
+    }
+    return raw;
+  }
+  if (/^\d+$/.test(raw)) {
+    return raw.padStart(4, '0');
+  }
+  return raw;
+}
+
 function normalizeHouseNumber(rawVal) {
   let val = String(rawVal || '').trim().replace(/\s+/g, '');
   if (!val) return '';
@@ -1381,6 +1428,27 @@ window.handleHouseAutoFormat = function (inputEl) {
 
 function getLocationById(locId) {
   return state.locations.find(l => l.id === locId) || null;
+}
+
+function getDefaultOfficeLocation() {
+  return (
+    state.locations.find(l => l.id === 'loc-office') ||
+    state.locations.find(l => l.name.includes('หน้าห้องนิติบุคคล') || l.name.toLowerCase().includes('office')) ||
+    state.locations[0] ||
+    null
+  );
+}
+
+function resolveLocationForImport(rawLocName) {
+  const name = String(rawLocName || '').trim();
+  const defaultLoc = getDefaultOfficeLocation();
+  if (!name) return defaultLoc;
+  const exact = state.locations.find(l => l.name.trim().toLowerCase() === name.toLowerCase());
+  if (exact) return exact;
+  const partial = state.locations.find(
+    l => l.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(l.name.toLowerCase())
+  );
+  return partial || defaultLoc;
 }
 
 function isSameHouse(h1, h2) {
@@ -2111,14 +2179,15 @@ function bindNavigationAndAdmin() {
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
         let count = 0;
         let skippedDup = 0;
+        const defaultOfficeLoc = getDefaultOfficeLocation();
         for (const r of rows) {
-          const h = r.house || r['บ้านเลขที่'] || '';
+          const h = r.house || r['บ้านเลขที่'] || r['ห้อง'] || '';
           if (!String(h).trim()) continue;
           const normHouse = normalizeHouseNumber(h);
-          const locName = String(r.location || r['จุดรับ'] || '').trim();
-          const locObj = state.locations.find(l => l.name.includes(locName)) || state.locations[0];
+          const locName = String(r.location || r['จุดรับ'] || r['จุดรับพัสดุ'] || '').trim();
+          const locObj = resolveLocationForImport(locName) || defaultOfficeLoc;
           const locId = locObj ? locObj.id : '';
-          const phoneVal = String(r.phone || r['เบอร์โทร'] || '').trim();
+          const phoneVal = String(r.phone || r['เบอร์โทร'] || '').replace(/\s+/g, '').trim();
           const noteVal = String(r.note || r['หมายเหตุ'] || '').trim();
           if (isDuplicateRequestEntry(normHouse, locId, phoneVal, noteVal)) {
             skippedDup += 1;
@@ -2138,7 +2207,7 @@ function bindNavigationAndAdmin() {
         }
         saveImportedFileSignature('requests', file);
         await saveAndSyncFullState();
-        alert(`นำเข้าคำขอสำเร็จ ${count} รายการ${skippedDup ? ` (ข้ามรายการซ้ำ ${skippedDup} รายการ)` : ''}`);
+        alert(`นำเข้าคำขอสำเร็จ ${count} รายการ (กรณีไม่ระบุจุดรับ ระบบกำหนดเป็น "${defaultOfficeLoc ? defaultOfficeLoc.name : 'หน้าห้องนิติบุคคล / Office'}")${skippedDup ? ` (ข้ามรายการซ้ำ ${skippedDup} รายการ)` : ''}`);
       } catch (err) {
         console.error(err);
         alert('ไม่สามารถอ่านไฟล์ Excel/CSV ได้ กรุณาตรวจสอบรูปแบบไฟล์');
@@ -2351,6 +2420,23 @@ function bindNavigationAndAdmin() {
   });
 
   document.getElementById('allRequestsList').addEventListener('click', async e => {
+    const delGroupBtn = e.target.closest('[data-delete-request-group]');
+    if (delGroupBtn) {
+      const ids = decodeURIComponent(delGroupBtn.dataset.deleteRequestGroup || '').split(',').filter(Boolean);
+      if (!ids.length) return;
+      ids.forEach(id => {
+        const req = state.requests.find(r => r.id === id);
+        if (req && req.matchedParcelId) {
+          const p = state.parcels.find(item => item.id === req.matchedParcelId);
+          if (p) p.matchedReqId = null;
+        }
+        pendingDeletedRequestIds.add(id);
+      });
+      state.requests = state.requests.filter(r => !ids.includes(r.id));
+      await saveAndSyncFullState();
+      return;
+    }
+
     const btn = e.target.closest('[data-delete-request]');
     if (!btn) return;
     const id = btn.dataset.deleteRequest;
@@ -2450,6 +2536,24 @@ function isWithinFilter(isoStr) {
 /* =========================================================
    6. REPORTS, EXPORTS & BULK ACTIONS
    ========================================================= */
+function groupRowsByLocation(rows) {
+  const groups = [];
+  const byLoc = new Map();
+  for (const r of rows) {
+    const locName = r.location || 'ไม่ระบุจุดรับ';
+    if (!byLoc.has(locName)) {
+      const grp = { location: locName, rows: [] };
+      byLoc.set(locName, grp);
+      groups.push(grp);
+    }
+    byLoc.get(locName).rows.push(r);
+  }
+  groups.forEach(g => {
+    g.rows.sort((a, b) => compareHouseNumbers(a.house, b.house));
+  });
+  return groups;
+}
+
 window.createReportFromSelected = async function () {
   const checked = [...document.querySelectorAll('.matched-house-checkbox:checked')].map(cb => cb.value);
   const targets = checked.length
@@ -2460,37 +2564,81 @@ window.createReportFromSelected = async function () {
 
   const rows = [];
   const reportedParcelIds = new Set();
+  const seenRowKeys = new Set();
 
   for (const req of state.requests) {
     if (req.status === 'matched' && targets.some(t => isSameHouse(t, req.house))) {
-      const parcel = state.parcels.find(p => p.id === req.matchedParcelId);
       const loc = getLocationById(req.locationId);
+      const locName = loc ? loc.name : 'หน้าห้องนิติบุคคล / Office';
       const showPhoneCol = Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false && req.phone);
-      rows.push({
-        house: req.house,
-        location: loc ? loc.name : '-',
-        requirePhone: Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false),
-        showPhone: showPhoneCol,
-        phone: showPhoneCol ? req.phone : '-',
-        courier: parcel ? parcel.courier : '-',
-        tracking: parcel ? parcel.tracking : '-',
-        note: req.note || parcel?.note || '-',
-        time: formatDateTimeTH(req.createdAt)
-      });
+      const reportHouse = formatReportHouse4Digits(req.house);
+
+      const houseParcels = state.parcels.filter(p => isSameHouse(p.house, req.house));
+      const directParcel = req.matchedParcelId ? state.parcels.find(p => p.id === req.matchedParcelId) : null;
+      const parcelsForReq = houseParcels.length ? houseParcels : (directParcel ? [directParcel] : []);
+
+      if (parcelsForReq.length) {
+        for (const parcel of parcelsForReq) {
+          const rowKey = `${req.id}::${parcel.id}`;
+          if (seenRowKeys.has(rowKey)) continue;
+          seenRowKeys.add(rowKey);
+
+          const refShort = formatLast5Ref(parcel.courier || parcel.tracking);
+          const parcelType = parcel.tracking || parcel.courier || '-';
+          rows.push({
+            house: reportHouse,
+            locationId: req.locationId || '',
+            location: locName,
+            requirePhone: Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false),
+            showPhone: showPhoneCol,
+            phone: showPhoneCol ? req.phone : '-',
+            ref5: refShort,
+            courier: parcel.courier || '-',
+            tracking: parcelType,
+            note: [parcel.note, req.note].filter(Boolean).join(' / ') || '-',
+            time: formatDateTimeTH(parcel.createdAt || req.createdAt)
+          });
+          reportedParcelIds.add(parcel.id);
+        }
+      } else {
+        rows.push({
+          house: reportHouse,
+          locationId: req.locationId || '',
+          location: locName,
+          requirePhone: Boolean(loc && loc.requirePhone && state.settings.showPhoneField !== false),
+          showPhone: showPhoneCol,
+          phone: showPhoneCol ? req.phone : '-',
+          ref5: '-',
+          courier: '-',
+          tracking: '-',
+          note: req.note || '-',
+          time: formatDateTimeTH(req.createdAt)
+        });
+      }
+
       req.status = 'reported';
       req.completedAt = new Date().toISOString();
       req.matchedParcelId = null;
-      if (parcel) reportedParcelIds.add(parcel.id);
     }
   }
+
+  rows.sort((a, b) => {
+    const locCmp = String(a.location || '').localeCompare(String(b.location || ''), 'th');
+    if (locCmp !== 0) return locCmp;
+    const hCmp = compareHouseNumbers(a.house, b.house);
+    if (hCmp !== 0) return hCmp;
+    return String(a.ref5 || '').localeCompare(String(b.ref5 || ''), 'th', { numeric: true });
+  });
+
+  const uniqueSortedHouses = [...new Set(rows.map(r => formatReportHouse4Digits(r.house)))].sort(compareHouseNumbers);
 
   reportedParcelIds.forEach(pid => pendingDeletedParcelIds.add(pid));
   state.parcels = state.parcels.filter(p => !reportedParcelIds.has(p.id));
   const includePhoneColumn = rows.some(r => r.showPhone || r.requirePhone);
   const reportObj = {
     id: uid('rep'),
-    title: `รายงานจ่ายพัสดุ (${targets.join(', ')})`,
-    houses: targets,
+    title: `รายงานจ่ายพัสดุ (${uniqueSortedHouses.join(', ')})`,
+    houses: uniqueSortedHouses,
     count: rows.length,
     includePhoneColumn,
     createdAt: new Date().toISOString(),
@@ -2505,38 +2653,55 @@ function renderReportArea(reportObj) {
   const area = document.getElementById('a4ReportPreviewArea');
   if (!area || !reportObj) return;
   const rows = Array.isArray(reportObj.rows) ? reportObj.rows : [];
-  const showPhoneCol = typeof reportObj.includePhoneColumn === 'boolean'
-    ? reportObj.includePhoneColumn
-    : rows.some(r => Boolean(r.showPhone) || (r.phone && r.phone !== '-'));
+  const locationGroups = groupRowsByLocation(rows);
 
-  area.innerHTML = `
-    <div style="background:#fff; padding:20px; border:1px solid #cbd5e1; border-radius:8px;">
-      <h3 style="margin:0 0 6px;">${escapeHTML(reportObj.title)}</h3>
-      <div style="font-size:12px; color:#64748b; margin-bottom:12px;">
-        ${escapeHTML(state.settings.projectName || '')} | ออกรายงานเมื่อ: ${formatDateTimeTH(reportObj.createdAt)} | จำนวน ${reportObj.count} รายการ
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>ลำดับ</th><th>บ้านเลขที่</th><th>จุดรับ</th><th>เลขอ้างอิง / ประเภท</th>${showPhoneCol ? '<th>เบอร์โทร</th>' : ''}<th>หมายเหตุ</th><th>ลายเซ็นผู้รับ</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map((r, i) => `
+  area.innerHTML = locationGroups.map((grp, gIdx) => {
+    const showPhoneCol = grp.rows.some(r => Boolean(r.showPhone) || (r.phone && r.phone !== '-'));
+    return `
+      <div class="report-sheet-block">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:6px;">
+          <div>
+            <h3 style="margin:0 0 4px;">ใบรายการจ่ายพัสดุ — จุดรับ: ${escapeHTML(grp.location)}</h3>
+            <div style="font-size:12px; color:#64748b;">
+              ${escapeHTML(state.settings.projectName || '')} | ออกรายงานเมื่อ: ${formatDateTimeTH(reportObj.createdAt)} | จำนวน ${grp.rows.length} ชิ้น
+            </div>
+          </div>
+          <span class="badge badge-reported">ใบที่ ${gIdx + 1}/${locationGroups.length}</span>
+        </div>
+        <table>
+          <thead>
             <tr>
-              <td>${i + 1}</td>
-              <td><strong>${escapeHTML(r.house)}</strong></td>
-              <td>${escapeHTML(r.location)}</td>
-              <td>${escapeHTML(r.courier)} ${r.tracking && r.tracking !== '-' ? `(${escapeHTML(r.tracking)})` : ''}</td>
-              ${showPhoneCol ? `<td>${escapeHTML(r.phone || '-')}</td>` : ''}
-              <td>${escapeHTML(r.note)}</td>
-              <td style="min-width:90px;"></td>
+              <th style="width:52px;">ลำดับ</th>
+              <th style="width:110px;">บ้านเลขที่</th>
+              <th style="width:110px;">เลขอ้างอิง (5 หลักท้าย)</th>
+              <th>ประเภทพัสดุ</th>
+              ${showPhoneCol ? '<th style="width:115px;">เบอร์โทร</th>' : ''}
+              <th>หมายเหตุ</th>
+              <th style="width:115px;">ลายเซ็นผู้รับ</th>
             </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+          </thead>
+          <tbody>
+            ${grp.rows.map((r, i) => {
+              const house4Display = formatReportHouse4Digits(r.house);
+              const ref5Display = r.ref5 || formatLast5Ref(r.courier || r.tracking);
+              const typeDisplay = r.tracking || r.courier || '-';
+              return `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><strong>${escapeHTML(house4Display)}</strong></td>
+                  <td><strong>${escapeHTML(ref5Display)}</strong></td>
+                  <td>${escapeHTML(typeDisplay)}</td>
+                  ${showPhoneCol ? `<td>${escapeHTML(r.phone || '-')}</td>` : ''}
+                  <td>${escapeHTML(r.note || '-')}</td>
+                  <td style="min-width:95px;"></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
 }
 
 window.openPrintWindow = function () {
@@ -2544,7 +2709,7 @@ window.openPrintWindow = function () {
   const safeHtml = rawHtml.replace(/<\/script>/gi, '<\\/script>');
   const win = window.open('', '_blank');
   if (!win) return alert('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>พิมพ์รายงาน A4</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #999;padding:6px;font-size:13px;}</style></head><body>${safeHtml}<script>window.onload=()=>window.print();<\/script></body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>พิมพ์รายงาน A4</title><style>body{font-family:'Segoe UI',Tahoma,sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;margin-bottom:16px;}th,td{border:1px solid #999;padding:6px;font-size:13px;text-align:left;}th{background:#f1f5f9;}.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#e2e8f0;}.report-sheet-block{page-break-after:always;break-after:page;}.report-sheet-block:last-child{page-break-after:auto;break-after:auto;}</style></head><body>${safeHtml}<script>window.onload=()=>window.print();<\/script></body></html>`);
   win.document.close();
 };
 
@@ -2552,38 +2717,59 @@ window.exportReportToExcel = function () {
   if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
   const latest = state.reportHistory[0];
   if (!latest || !latest.rows.length) return alert('ยังไม่มีข้อมูลรายงาน');
-  const showPhoneCol = typeof latest.includePhoneColumn === 'boolean'
-    ? latest.includePhoneColumn
-    : latest.rows.some(r => Boolean(r.showPhone) || (r.phone && r.phone !== '-'));
-  const exportRows = latest.rows.map((r, idx) => {
-    const item = {
-      'ลำดับ': idx + 1,
-      'บ้านเลขที่': r.house,
-      'จุดรับ': r.location,
-      'เลขอ้างอิง': r.courier,
-      'ประเภท': r.tracking
-    };
-    if (showPhoneCol) item['เบอร์โทร'] = r.phone || '-';
-    item['หมายเหตุ'] = r.note || '-';
-    item['เวลาบันทึก'] = r.time || '-';
-    return item;
-  });
-  const ws = XLSX.utils.json_to_sheet(exportRows);
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'ParcelReport');
+  const locationGroups = groupRowsByLocation(latest.rows);
+
+  locationGroups.forEach((grp, idx) => {
+    const showPhoneCol = grp.rows.some(r => Boolean(r.showPhone) || (r.phone && r.phone !== '-'));
+    const exportRows = grp.rows.map((r, rIdx) => {
+      const house4Display = formatReportHouse4Digits(r.house);
+      const ref5Display = r.ref5 || formatLast5Ref(r.courier || r.tracking);
+      const typeDisplay = r.tracking || r.courier || '-';
+      const item = {
+        'ลำดับ': rIdx + 1,
+        'บ้านเลขที่': house4Display,
+        'จุดรับ': r.location,
+        'เลขอ้างอิง (5 หลักท้าย)': ref5Display,
+        'ประเภทพัสดุ': typeDisplay
+      };
+      if (showPhoneCol) item['เบอร์โทร'] = r.phone || '-';
+      item['หมายเหตุ'] = r.note || '-';
+      item['เวลาบันทึก'] = r.time || '-';
+      return item;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const safeSheetName = (grp.location || `Sheet_${idx + 1}`).replace(/[\\/?*[\]:]/g, '_').slice(0, 28) || `Sheet_${idx + 1}`;
+    XLSX.utils.book_append_sheet(wb, ws, `${idx + 1}_${safeSheetName}`.slice(0, 31));
+  });
+
   XLSX.writeFile(wb, `parcel-report-${getLocalDateKey()}.xlsx`);
 };
 
 window.downloadParcelTemplate = function () {
   if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
   const sample = [
-    { 'บ้านเลขที่': '62/1', 'เลขอ้างอิง': 'REF-001', 'ประเภท': 'กล่องพัสดุ', 'หมายเหตุ': '' },
-    { 'บ้านเลขที่': '62/2', 'เลขอ้างอิง': 'REF-002', 'ประเภท': 'ซองเอกสาร', 'หมายเหตุ': '' }
+    { 'บ้านเลขที่': '62/1', 'เลขอ้างอิง': '6911-00001', 'ประเภท': 'กล่องพัสดุ', 'หมายเหตุ': '' },
+    { 'บ้านเลขที่': '62/2', 'เลขอ้างอิง': '6911-00002', 'ประเภท': 'ซองเอกสาร', 'หมายเหตุ': '' }
   ];
   const ws = XLSX.utils.json_to_sheet(sample);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Template');
   XLSX.writeFile(wb, 'parcel-import-template.xlsx');
+};
+
+window.downloadRequestTemplate = function () {
+  if (typeof XLSX === 'undefined') return alert('ไม่พบไลบรารี SheetJS');
+  const sample = [
+    { 'บ้านเลขที่': '62/1', 'จุดรับ': 'หน้าห้องนิติบุคคล / Office', 'เบอร์โทร': '', 'หมายเหตุ': '' },
+    { 'บ้านเลขที่': '62/2', 'จุดรับ': '', 'เบอร์โทร': '', 'หมายเหตุ': 'หากไม่ระบุจุดรับ ระบบจะบันทึกเป็น หน้าห้องนิติบุคคล / Office อัตโนมัติ' },
+    { 'บ้านเลขที่': '62/3', 'จุดรับ': 'ฝากใส่ตู้ HIVE BOX', 'เบอร์โทร': '0812345678', 'หมายเหตุ': '' }
+  ];
+  const ws = XLSX.utils.json_to_sheet(sample);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'RequestTemplate');
+  XLSX.writeFile(wb, 'request-import-template.xlsx');
 };
 
 window.exportAndClearPendingRequests = async function () {
@@ -2672,6 +2858,33 @@ window.exportBackupJson = function () {
 /* =========================================================
    7. RENDER ADMIN DATA
    ========================================================= */
+function groupRequestsForAdminView(requests) {
+  const map = new Map();
+  for (const r of requests) {
+    const key = String(r.house || '').trim().toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, {
+        house: r.house,
+        ids: [r.id],
+        statuses: [r.status],
+        locationNames: [],
+        phones: [],
+        notes: [],
+        latestCreatedAt: r.createdAt
+      });
+    }
+    const grp = map.get(key);
+    if (!grp.ids.includes(r.id)) grp.ids.push(r.id);
+    if (r.status && !grp.statuses.includes(r.status)) grp.statuses.push(r.status);
+    const locName = getLocationById(r.locationId)?.name || '-';
+    if (locName && !grp.locationNames.includes(locName)) grp.locationNames.push(locName);
+    if (r.phone && !grp.phones.includes(r.phone)) grp.phones.push(r.phone);
+    if (r.note && !grp.notes.includes(r.note)) grp.notes.push(r.note);
+    if (new Date(r.createdAt) > new Date(grp.latestCreatedAt)) grp.latestCreatedAt = r.createdAt;
+  }
+  return Array.from(map.values()).sort((a, b) => compareHouseNumbers(a.house, b.house));
+}
+
 function renderAdminData() {
   const visibleRequests = state.requests.filter(r => isWithinFilter(r.createdAt));
   const pendingRequests = visibleRequests.filter(r => r.status === 'pending');
@@ -2714,7 +2927,7 @@ function renderAdminData() {
 
   const grouped = {};
   for (const r of matchedRequests) grouped[r.house] = (grouped[r.house] || 0) + 1;
-  const matchedHouses = Object.keys(grouped);
+  const matchedHouses = Object.keys(grouped).sort(compareHouseNumbers);
   document.getElementById('matchedHousesList').innerHTML = matchedHouses.length
     ? matchedHouses.map(h => `
         <label style="display:inline-flex; align-items:center; gap:6px; margin-right:10px; padding:6px 10px; background:#eff6ff; border-radius:6px;">
@@ -2724,21 +2937,26 @@ function renderAdminData() {
       `).join('')
     : '<span style="color:#64748b;">ยังไม่มีบ้านที่จับคู่พัสดุพร้อมออกรายงาน</span>';
 
-  document.getElementById('allRequestsList').innerHTML = visibleRequests.length
-    ? visibleRequests.map(r => {
-        const loc = getLocationById(r.locationId);
-        const badgeClass = r.status === 'matched' ? 'badge-matched' : r.status === 'reported' ? 'badge-reported' : 'badge-pending';
-        const badgeText = r.status === 'matched' ? 'จับคู่พัสดุแล้ว' : r.status === 'reported' ? 'ออกรายงานแล้ว' : 'รอพัสดุ';
+  const consolidatedRequests = groupRequestsForAdminView(visibleRequests);
+  document.getElementById('allRequestsList').innerHTML = consolidatedRequests.length
+    ? consolidatedRequests.map(grp => {
+        const primaryStatus = grp.statuses.includes('matched')
+          ? 'matched'
+          : (grp.statuses.includes('pending') ? 'pending' : 'reported');
+        const badgeClass = primaryStatus === 'matched' ? 'badge-matched' : primaryStatus === 'reported' ? 'badge-reported' : 'badge-pending';
+        const badgeText = primaryStatus === 'matched' ? 'จับคู่พัสดุแล้ว' : primaryStatus === 'reported' ? 'ออกรายงานแล้ว' : 'รอพัสดุ';
         return `
           <div style="padding:10px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; gap:8px;">
             <div>
-              <strong>${escapeHTML(r.house)}</strong> <span class="badge ${badgeClass}">${badgeText}</span>
-              — จุดรับ: <strong>${escapeHTML(loc ? loc.name : '-')}</strong>
-              ${r.phone ? `| โทร: ${escapeHTML(r.phone)}` : ''}
-              ${r.note ? `| หมายเหตุ: ${escapeHTML(r.note)}` : ''}
-              <div style="font-size:12px; color:#64748b;">บันทึกเมื่อ: ${formatDateTimeTH(r.createdAt)}</div>
+              <strong>${escapeHTML(grp.house)}</strong>
+              <span class="badge ${badgeClass}">${badgeText}</span>
+              ${grp.ids.length > 1 ? `<span class="badge badge-reported">รวม ${grp.ids.length} คำขอ</span>` : ''}
+              — จุดรับ: <strong>${escapeHTML(grp.locationNames.join(', ') || '-')}</strong>
+              ${grp.phones.length ? `| โทร: ${escapeHTML(grp.phones.join(', '))}` : ''}
+              ${grp.notes.length ? `| หมายเหตุ: ${escapeHTML(grp.notes.join(' / '))}` : ''}
+              <div style="font-size:12px; color:#64748b;">บันทึกล่าสุด: ${formatDateTimeTH(grp.latestCreatedAt)}</div>
             </div>
-            <button type="button" class="btn btn-danger btn-sm" data-delete-request="${escapeHTML(r.id)}">ลบ</button>
+            <button type="button" class="btn btn-danger btn-sm" data-delete-request-group="${encodeURIComponent(grp.ids.join(','))}">ลบ</button>
           </div>`;
       }).join('')
     : '<div style="color:#64748b;">ยังไม่มีคำขอรับพัสดุในระบบ</div>';
@@ -2746,7 +2964,7 @@ function renderAdminData() {
   document.getElementById('reportHistoryList').innerHTML = state.reportHistory.length
     ? state.reportHistory.map((rep, idx) => `
         <div style="padding:8px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
-          <div><strong>${escapeHTML(rep.title)}</strong> — ${formatDateTimeTH(rep.createdAt)} (${rep.count} รายการ)</div>
+          <div><strong>${escapeHTML(rep.title)}</strong> — ${formatDateTimeTH(rep.createdAt)} (${rep.count} ชิ้น)</div>
           <button type="button" class="btn btn-outline btn-sm" data-view-report="${idx}">ดู / พิมพ์ซ้ำ</button>
         </div>
       `).join('')
