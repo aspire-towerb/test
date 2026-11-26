@@ -232,6 +232,7 @@
           <div id="cloudConnectionBadge" style="font-size:12px; color:var(--muted);">สถานะซิงค์: โหมดออฟไลน์ในเครื่อง</div>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="copyUserPortalLink()">คัดลอกลิงก์หน้าบ้านลูกบ้าน</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="manualSyncNow()">ดึงข้อมูลล่าสุดจาก Cloud</button>
           <button type="button" id="adminLogoutBtn" class="btn btn-danger btn-sm">ออกจากระบบ</button>
         </div>
@@ -651,7 +652,7 @@
    ========================================================= */
 const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V6';
 const CREDS_STORAGE_KEY = 'PARCEL_SYSTEM_CREDENTIALS_V1';
-const DEFAULT_CLOUD_URL = '';
+const DEFAULT_CLOUD_URL = 'https://script.google.com/macros/s/AKfycbxT1ABL4Uazf32ycP9qxbxEmqeDwu6aId7tsa_yRMtb4m_rR4wbFdm0aMG_iQZPCRUz/exec';
 const MAX_SLIDE_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB (อัปโหลดขึ้น Google Drive)
 
 const defaultState = {
@@ -859,8 +860,78 @@ function saveLocalState() {
 /* =========================================================
    2. GOOGLE DRIVE / CLOUD SYNC & TELEGRAM HELPERS
    ========================================================= */
+function getUrlConfigParams() {
+  const params = new URLSearchParams(window.location.search || '');
+  let hashParams = new URLSearchParams();
+  if (window.location.hash && window.location.hash.length > 1) {
+    const rawHash = window.location.hash.slice(1);
+    hashParams = new URLSearchParams(rawHash.startsWith('?') ? rawHash.slice(1) : rawHash);
+  }
+  const mode = (params.get('mode') || hashParams.get('mode') || '').trim().toLowerCase();
+  const api = (params.get('api') || params.get('cloud') || hashParams.get('api') || hashParams.get('cloud') || '').trim();
+  return { mode, api };
+}
+
+function applyUrlConfigToSettings() {
+  const { api } = getUrlConfigParams();
+  if (api) {
+    const cleanApi = api.replace(/\s+/g, '').trim();
+    if (/^https?:\/\//i.test(cleanApi)) {
+      state.settings.cloudSyncUrl = cleanApi;
+      state.settings.autoSyncOnLoad = true;
+      saveCredentialsBackup(state.settings);
+    }
+  }
+}
+
+window.copyUserPortalLink = async function () {
+  const cloudUrl = getCloudUrl();
+  const baseUrl = `${window.location.origin}${window.location.pathname}`;
+  const shareUrl = cloudUrl
+    ? `${baseUrl}?mode=user&api=${encodeURIComponent(cloudUrl)}`
+    : `${baseUrl}?mode=user`;
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(shareUrl);
+    } else {
+      const tmp = document.createElement('textarea');
+      tmp.value = shareUrl;
+      document.body.appendChild(tmp);
+      tmp.select();
+      document.execCommand('copy');
+      document.body.removeChild(tmp);
+    }
+    alert(
+      cloudUrl
+        ? `คัดลอกลิงก์หน้าบ้านสำหรับลูกบ้านแล้ว (ฝังลิงก์ Cloud อัตโนมัติ):\n${shareUrl}`
+        : `คัดลอกลิงก์หน้าบ้านสำหรับลูกบ้านแล้ว:\n${shareUrl}\n\nหมายเหตุ: ยังไม่ได้ตั้งค่า URL ของ Google Apps Script ในแท็บ 7. การตั้งค่า`
+    );
+  } catch (_) {
+    prompt('คัดลอกลิงก์หน้าบ้านสำหรับลูกบ้าน:', shareUrl);
+  }
+};
+
+function applyPortalModeFromUrl() {
+  const { mode } = getUrlConfigParams();
+  const btnUser = document.getElementById('btnShowUserPortal');
+  const btnAdmin = document.getElementById('btnShowAdminPortal');
+  const secUser = document.getElementById('userPortalSection');
+  const secAdmin = document.getElementById('adminPortalSection');
+
+  if (mode === 'user') {
+    if (btnAdmin) btnAdmin.style.display = 'none';
+    if (btnUser) {
+      btnUser.classList.add('active');
+      btnUser.textContent = 'หน้าแจ้งรับพัสดุ';
+    }
+    if (secUser) secUser.style.display = 'block';
+    if (secAdmin) secAdmin.style.display = 'none';
+  }
+}
+
 function getCloudUrl() {
-  return (state.settings.cloudSyncUrl || '').trim();
+  return String(state.settings.cloudSyncUrl || '').replace(/\s+/g, '').trim();
 }
 
 function updateCloudBadge(statusText) {
@@ -875,17 +946,28 @@ function updateCloudBadge(statusText) {
   }
 }
 
-async function fetchJsonWithCheck(url, options = {}) {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+async function fetchJsonWithCheck(url, options = {}, retries = 1) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        throw new Error('Invalid JSON response from server');
+      }
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
+    }
   }
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch (_) {
-    throw new Error('Invalid JSON response from server');
-  }
+  throw lastErr;
 }
 
 function mergeRemoteState(remote) {
@@ -895,7 +977,8 @@ function mergeRemoteState(remote) {
   const localFilter = state.filterMode;
   const localStart = state.customStartDate;
   const localEnd = state.customEndDate;
-  const localUrl = getCloudUrl();
+  const urlCfg = getUrlConfigParams();
+  const localUrl = urlCfg.api || getCloudUrl();
 
   if (Array.isArray(remote.adminAccounts) && remote.adminAccounts.length) state.adminAccounts = remote.adminAccounts;
   if (Array.isArray(remote.locations) && remote.locations.length) state.locations = remote.locations;
@@ -2375,6 +2458,7 @@ function renderAll() {
    8. INITIALIZE
    ========================================================= */
 document.addEventListener('DOMContentLoaded', async () => {
+  applyUrlConfigToSettings();
   checkAutoClearTimers();
   runAutoMatching();
   saveLocalState();
@@ -2382,6 +2466,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderAdminVisibility();
   bindUserRequestForm();
   bindNavigationAndAdmin();
+  applyPortalModeFromUrl();
   initSlideshowIfChanged();
   renderAll();
   if (state.reportHistory[0]) renderReportArea(state.reportHistory[0]);
