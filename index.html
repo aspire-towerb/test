@@ -67,7 +67,6 @@
     .check-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
     .check-row input[type="checkbox"] { width: auto; }
     .check-row label { margin: 0; font-weight: 500; cursor: pointer; }
-    /* Slideshow */
     .slideshow-wrap { position: relative; overflow: hidden; border-radius: 12px; margin-bottom: 14px; }
     #slideshowTrack { display: flex; width: 100%; align-items: flex-start; }
     .slide-image-box {
@@ -103,18 +102,15 @@
     #slideshowDots { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
     .slide-dot { width: 8px; height: 8px; border-radius: 50%; border: none; background: #cbd5e1; cursor: pointer; padding: 0; }
     .slide-dot.active { background: var(--primary); width: 18px; border-radius: 99px; }
-    /* Ticker & Latest Box */
     #latestRequestBlueBox {
       display: none; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 10px;
       padding: 14px; margin-top: 14px;
     }
-    /* Stats & Summary */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
     .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
     .stat-card .num { font-size: 26px; font-weight: 700; color: var(--primary); }
     .loc-summary-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
     .loc-pill { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
-    /* Tabs */
     .tab-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
     .tab-btn { background: #e2e8f0; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
     .tab-btn.active { background: var(--primary); color: #fff; }
@@ -265,7 +261,7 @@
       <!-- Location Breakdown Summary -->
       <div class="loc-summary-bar" id="locationSummaryBar"></div>
 
-      <!-- All 7 Tabs -->
+      <!-- All 8 Tabs -->
       <div class="tab-bar">
         <button type="button" class="tab-btn active" data-admin-tab="tabParcels">1. พัสดุประจำวัน & จับคู่คำขอ</button>
         <button type="button" class="tab-btn" data-admin-tab="tabSavedRequests">2. รายการคำขอที่บันทึก</button>
@@ -273,7 +269,8 @@
         <button type="button" class="tab-btn" data-admin-tab="tabLocationsHouses">4. จุดรับพัสดุ & สร้างบ้านเลขที่</button>
         <button type="button" class="tab-btn" data-admin-tab="tabAnnouncementsAdmins">5. ภาพประกาศ & บัญชีแอดมิน</button>
         <button type="button" class="tab-btn" data-admin-tab="tabBackupDelete">6. สำรองไฟล์</button>
-        <button type="button" class="tab-btn" data-admin-tab="tabSettings">7. การตั้งค่า</button>
+        <button type="button" class="tab-btn" data-admin-tab="tabMonthlyHistory">7. ประวัติย้อนหลังรายเดือน</button>
+        <button type="button" class="tab-btn" data-admin-tab="tabSettings">8. การตั้งค่า</button>
       </div>
 
       <!-- TAB 1 -->
@@ -487,13 +484,41 @@
         </div>
       </div>
 
-      <!-- TAB 7: COMPREHENSIVE SETTINGS -->
+      <!-- TAB 7: MONTHLY ARCHIVE HISTORY -->
+      <div id="tabMonthlyHistory" class="admin-tab-panel" style="display:none;">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0;">ประวัติย้อนหลังรายเดือน (Monthly_History)</h3>
+              <div style="font-size:12px; color:var(--muted);">ดึงข้อมูลจากไฟล์ <code>history_YYYY-MM.json</code> บน Google Drive</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <label style="margin:0; font-size:12px;">ย้ายรายการเก่ากว่า (วัน):</label>
+              <input type="number" id="archiveCutoffDaysInput" value="7" min="0" max="365" style="width:76px; padding:6px 8px;" />
+              <button type="button" class="btn btn-primary btn-sm" onclick="triggerArchiveNow()">ย้ายเข้าประวัติรายเดือนทันที</button>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+            <label for="historyMonthSelect" style="margin:0;">เลือกเดือนที่ต้องการดู:</label>
+            <select id="historyMonthSelect" style="max-width:220px;" onchange="loadSelectedMonthHistory(this.value)">
+              <option value="">-- เลือกเดือน --</option>
+            </select>
+            <button type="button" class="btn btn-outline btn-sm" onclick="refreshHistoryMonthsList()">รีเฟรชรายชื่อเดือน</button>
+          </div>
+
+          <div id="monthlyHistoryStatus" style="font-size:12px; color:var(--muted); margin-bottom:10px;"></div>
+          <div id="monthlyHistoryContent">กรุณาเลือกเดือนเพื่อดูประวัติย้อนหลัง</div>
+        </div>
+      </div>
+
+      <!-- TAB 8: COMPREHENSIVE SETTINGS -->
       <div id="tabSettings" class="admin-tab-panel" style="display:none;">
         <form id="adminSettingsForm">
 
-          <!-- 7.1 ข้อมูลโครงการและหน้าตาหน้าลูกบ้าน -->
+          <!-- 8.1 ข้อมูลโครงการและหน้าตาหน้าลูกบ้าน -->
           <div class="card">
-            <h3>7.1 ข้อมูลโครงการ & หน้าตาหน้าลูกบ้าน (User Portal)</h3>
+            <h3>8.1 ข้อมูลโครงการ & หน้าตาหน้าลูกบ้าน (User Portal)</h3>
             <div class="form-grid">
               <div>
                 <label for="settingProjectName">ชื่อโครงการ / นิติบุคคล</label>
@@ -537,9 +562,9 @@
             </div>
           </div>
 
-          <!-- 7.2 การจัดรูปแบบบ้านเลขที่และระบบจับคู่ -->
+          <!-- 8.2 การจัดรูปแบบบ้านเลขที่และระบบจับคู่ -->
           <div class="card">
-            <h3>7.2 การจัดรูปแบบบ้านเลขที่ & กติกาการจับคู่พัสดุ</h3>
+            <h3>8.2 การจัดรูปแบบบ้านเลขที่ & กติกาการจับคู่พัสดุ</h3>
             <div class="form-grid">
               <div>
                 <label for="settingProjectPrefix">คำนำหน้าบ้านเลขที่เริ่มต้น</label>
@@ -569,9 +594,9 @@
             </div>
           </div>
 
-          <!-- 7.3 การตัดรอบอัตโนมัติ (Auto-Clear) -->
+          <!-- 8.3 การตัดรอบอัตโนมัติ (Auto-Clear) -->
           <div class="card">
-            <h3>7.3 ตั้งเวลาตัดรอบอัตโนมัติประจำวัน (Auto-Clear)</h3>
+            <h3>8.3 ตั้งเวลาตัดรอบอัตโนมัติประจำวัน (Auto-Clear)</h3>
             <div class="form-grid">
               <div>
                 <label for="settingAutoClearParcels">เวลาล้างพัสดุประจำวัน</label>
@@ -594,9 +619,9 @@
             </div>
           </div>
 
-          <!-- 7.4 การเชื่อมต่อ Google Drive / Sheets Cloud & Telegram -->
+          <!-- 8.4 การเชื่อมต่อ Google Drive / Sheets Cloud & Telegram -->
           <div class="card">
-            <h3>7.4 เชื่อมต่อ Google Drive & Google Sheets Cloud & Telegram</h3>
+            <h3>8.4 เชื่อมต่อ Google Drive & Google Sheets Cloud & Telegram</h3>
             <div class="form-grid">
               <div>
                 <label for="settingCloudSyncUrl">URL ของ Google Apps Script Web App</label>
@@ -656,7 +681,7 @@
 const STORAGE_KEY = 'PARCEL_SYSTEM_FULL_V6';
 const CREDS_STORAGE_KEY = 'PARCEL_SYSTEM_CREDENTIALS_V1';
 const DEFAULT_CLOUD_URL = 'https://script.google.com/macros/s/AKfycbxT1ABL4Uazf32ycP9qxbxEmqeDwu6aId7tsa_yRMtb4m_rR4wbFdm0aMG_iQZPCRUz/exec';
-const MAX_SLIDE_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB (อัปโหลดขึ้น Google Drive)
+const MAX_SLIDE_IMAGE_BYTES = 4 * 1024 * 1024;
 
 const defaultState = {
   isAdminLoggedIn: false,
@@ -676,6 +701,7 @@ const defaultState = {
   parcels: [],
   requests: [],
   reportHistory: [],
+  availableHistoryMonths: [],
   announcements: [
     'แจ้งลูกบ้านรับพัสดุได้ทุกวันที่ห้องนิติบุคคล เวลา 08:30 - 20:00 น.',
     'กรณีฝากใส่ตู้ HIVE BOX กรุณาตรวจสอบรหัส OTP ก่อนมารับพัสดุ'
@@ -745,6 +771,7 @@ function loadState() {
       parcels: Array.isArray(parsed.parcels) ? parsed.parcels : [],
       requests: Array.isArray(parsed.requests) ? parsed.requests : [],
       reportHistory: Array.isArray(parsed.reportHistory) ? parsed.reportHistory : [],
+      availableHistoryMonths: Array.isArray(parsed.availableHistoryMonths) ? parsed.availableHistoryMonths : [],
       announcements: Array.isArray(parsed.announcements) ? parsed.announcements : base.announcements,
       slides: Array.isArray(parsed.slides) && parsed.slides.length ? parsed.slides : base.slides,
       settings: applySavedCredentialsToSettings({
@@ -768,6 +795,8 @@ let slideTimer = null;
 let isSyncing = false;
 let pollTimer = null;
 let lastSlidesSignature = '';
+let pendingDeletedRequestIds = new Set();
+let pendingDeletedParcelIds = new Set();
 
 function extractCredentialsFromSettings(s = {}) {
   return {
@@ -842,7 +871,6 @@ function saveLocalState() {
   } catch (err) {
     if (err && err.name === 'QuotaExceededError') {
       try {
-        // กรณีมีข้อมูล Base64 ค้างใน Cloud ให้ตัดเฉพาะ Base64 ออกตอนบันทึกลง Cache ในเครื่อง (ลิงก์ Google Drive ยังอยู่ครบ)
         const compactState = JSON.parse(JSON.stringify(state));
         if (Array.isArray(compactState.slides)) {
           compactState.slides = compactState.slides.map(s => ({
@@ -861,7 +889,7 @@ function saveLocalState() {
 }
 
 /* =========================================================
-   2. GOOGLE DRIVE / CLOUD SYNC & TELEGRAM HELPERS
+   2. GOOGLE DRIVE / CLOUD SYNC, MONTHLY ARCHIVE & TELEGRAM
    ========================================================= */
 function getUrlConfigParams() {
   const params = new URLSearchParams(window.location.search || '');
@@ -908,7 +936,7 @@ window.copyUserPortalLink = async function () {
     alert(
       cloudUrl
         ? `คัดลอกลิงก์หน้าบ้านสำหรับลูกบ้านแล้ว (ฝังลิงก์ Cloud อัตโนมัติ):\n${shareUrl}`
-        : `คัดลอกลิงก์หน้าบ้านสำหรับลูกบ้านแล้ว:\n${shareUrl}\n\nหมายเหตุ: ยังไม่ได้ตั้งค่า URL ของ Google Apps Script ในแท็บ 7. การตั้งค่า`
+        : `คัดลอกลิงก์หน้าบ้านสำหรับลูกบ้านแล้ว:\n${shareUrl}\n\nหมายเหตุ: ยังไม่ได้ตั้งค่า URL ของ Google Apps Script ในแท็บ 8. การตั้งค่า`
     );
   } catch (_) {
     prompt('คัดลอกลิงก์หน้าบ้านสำหรับลูกบ้าน:', shareUrl);
@@ -941,7 +969,7 @@ function updateCloudBadge(statusText) {
   const badge = document.getElementById('cloudConnectionBadge');
   if (!badge) return;
   if (!getCloudUrl()) {
-    badge.textContent = 'สถานะซิงค์: โหมดออฟไลน์ในเครื่อง (ตั้งค่า URL ได้ที่แท็บ 7. การตั้งค่า)';
+    badge.textContent = 'สถานะซิงค์: โหมดออฟไลน์ในเครื่อง (ตั้งค่า URL ได้ที่แท็บ 8. การตั้งค่า)';
     badge.style.color = '#64748b';
   } else {
     badge.textContent = statusText || 'สถานะซิงค์: เชื่อมต่อ Google Drive / Sheets Cloud แล้ว';
@@ -973,7 +1001,7 @@ async function fetchJsonWithCheck(url, options = {}, retries = 1) {
   throw lastErr;
 }
 
-function mergeRemoteState(remote) {
+function mergeRemoteState(remote, availableMonths = null) {
   if (!remote || typeof remote !== 'object') return;
   const localAuth = state.isAdminLoggedIn;
   const localAdminUser = state.currentAdminUser;
@@ -986,9 +1014,14 @@ function mergeRemoteState(remote) {
   if (Array.isArray(remote.adminAccounts) && remote.adminAccounts.length) state.adminAccounts = remote.adminAccounts;
   if (Array.isArray(remote.locations) && remote.locations.length) state.locations = remote.locations;
   if (Array.isArray(remote.houses) && remote.houses.length) state.houses = remote.houses;
-  if (Array.isArray(remote.parcels)) state.parcels = remote.parcels;
-  if (Array.isArray(remote.requests)) state.requests = remote.requests;
+  if (Array.isArray(remote.parcels)) state.parcels = remote.parcels.filter(p => !pendingDeletedParcelIds.has(p.id));
+  if (Array.isArray(remote.requests)) state.requests = remote.requests.filter(r => !pendingDeletedRequestIds.has(r.id));
   if (Array.isArray(remote.reportHistory)) state.reportHistory = remote.reportHistory;
+  if (Array.isArray(availableMonths)) {
+    state.availableHistoryMonths = availableMonths;
+  } else if (Array.isArray(remote.availableMonths)) {
+    state.availableHistoryMonths = remote.availableMonths;
+  }
   if (Array.isArray(remote.announcements) && remote.announcements.length) state.announcements = remote.announcements;
   if (remote.customDefaultSettings && typeof remote.customDefaultSettings === 'object') {
     state.customDefaultSettings = remote.customDefaultSettings;
@@ -1040,7 +1073,7 @@ async function pullFromCloud(silent = true) {
   try {
     const data = await fetchJsonWithCheck(`${url}?t=${Date.now()}`, { method: 'GET' });
     if (data && data.ok && data.state && typeof data.state === 'object') {
-      mergeRemoteState(data.state);
+      mergeRemoteState(data.state, data.availableMonths);
       updateCloudBadge(`สถานะซิงค์: อัปเดตล่าสุด ${new Date().toLocaleTimeString('th-TH')}`);
       return true;
     }
@@ -1064,11 +1097,18 @@ async function pushActionToCloud(payload) {
       body: JSON.stringify(payload)
     });
     if (data && data.ok) {
+      if (payload.action === 'SAVE_FULL_STATE') {
+        pendingDeletedRequestIds.clear();
+        pendingDeletedParcelIds.clear();
+      }
       if (data.state && typeof data.state === 'object') {
-        mergeRemoteState(data.state);
+        mergeRemoteState(data.state, data.availableMonths);
+      } else if (Array.isArray(data.availableMonths)) {
+        state.availableHistoryMonths = data.availableMonths;
+        renderHistoryMonthsDropdown();
       }
       updateCloudBadge(`สถานะซิงค์: บันทึกขึ้น Cloud เมื่อ ${new Date().toLocaleTimeString('th-TH')}`);
-      return true;
+      return data;
     }
   } catch (err) {
     console.error('Push to cloud failed:', err);
@@ -1079,7 +1119,7 @@ async function pushActionToCloud(payload) {
 async function uploadSlideImageToDrive(file) {
   const url = getCloudUrl();
   if (!url) {
-    throw new Error('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "7. การตั้งค่า" ก่อนอัปโหลดรูปขึ้น Google Drive');
+    throw new Error('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "8. การตั้งค่า" ก่อนอัปโหลดรูปขึ้น Google Drive');
   }
   const base64Data = await readImageFileAsDataUrl(file);
   const data = await fetchJsonWithCheck(url, {
@@ -1107,6 +1147,7 @@ function getCleanCloudPayloadState() {
   delete copy.filterMode;
   delete copy.customStartDate;
   delete copy.customEndDate;
+  delete copy.availableHistoryMonths;
   return copy;
 }
 
@@ -1114,8 +1155,139 @@ async function saveAndSyncFullState() {
   runAutoMatching();
   saveLocalState();
   renderAll();
-  await pushActionToCloud({ action: 'SAVE_FULL_STATE', state: getCleanCloudPayloadState() });
+  await pushActionToCloud({
+    action: 'SAVE_FULL_STATE',
+    state: getCleanCloudPayloadState(),
+    deletedRequestIds: Array.from(pendingDeletedRequestIds),
+    deletedParcelIds: Array.from(pendingDeletedParcelIds)
+  });
 }
+
+/* --- Monthly History Functions --- */
+function renderHistoryMonthsDropdown() {
+  const sel = document.getElementById('historyMonthSelect');
+  if (!sel) return;
+  const currentVal = sel.value;
+  const months = Array.isArray(state.availableHistoryMonths) ? state.availableHistoryMonths : [];
+  sel.innerHTML = `<option value="">-- เลือกเดือน (${months.length}) --</option>` +
+    months.map(m => `<option value="${escapeHTML(m)}">${escapeHTML(m)}</option>`).join('');
+  if (currentVal && months.includes(currentVal)) {
+    sel.value = currentVal;
+  }
+}
+
+window.refreshHistoryMonthsList = async function () {
+  const url = getCloudUrl();
+  const statusEl = document.getElementById('monthlyHistoryStatus');
+  if (!url) {
+    if (statusEl) statusEl.textContent = 'ยังไม่ได้ตั้งค่า URL ของ Google Apps Script';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'กำลังโหลดรายชื่อเดือน...';
+  try {
+    const data = await fetchJsonWithCheck(`${url}?action=LIST_HISTORY_MONTHS&t=${Date.now()}`, { method: 'GET' });
+    if (data && data.ok && Array.isArray(data.months)) {
+      state.availableHistoryMonths = data.months;
+      saveLocalState();
+      renderHistoryMonthsDropdown();
+      if (statusEl) statusEl.textContent = `พบประวัติทั้งหมด ${data.months.length} เดือน`;
+    }
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'ไม่สามารถโหลดรายชื่อเดือนได้';
+  }
+};
+
+window.loadSelectedMonthHistory = async function (monthKey) {
+  const contentEl = document.getElementById('monthlyHistoryContent');
+  const statusEl = document.getElementById('monthlyHistoryStatus');
+  if (!contentEl) return;
+  if (!monthKey) {
+    contentEl.innerHTML = 'กรุณาเลือกเดือนเพื่อดูประวัติย้อนหลัง';
+    return;
+  }
+  const url = getCloudUrl();
+  if (!url) {
+    contentEl.innerHTML = '<div style="color:var(--danger);">กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ 8. การตั้งค่า</div>';
+    return;
+  }
+  if (statusEl) statusEl.textContent = `กำลังโหลดข้อมูลเดือน ${monthKey}...`;
+  contentEl.innerHTML = 'กำลังโหลดข้อมูล...';
+
+  try {
+    const data = await fetchJsonWithCheck(`${url}?month=${encodeURIComponent(monthKey)}&t=${Date.now()}`, { method: 'GET' });
+    if (!data || !data.ok || !data.history) {
+      throw new Error(data?.error || 'ไม่พบข้อมูลประวัติ');
+    }
+    if (Array.isArray(data.availableMonths)) {
+      state.availableHistoryMonths = data.availableMonths;
+      renderHistoryMonthsDropdown();
+    }
+    const hist = data.history;
+    const reqs = Array.isArray(hist.requests) ? hist.requests : [];
+    const parcels = Array.isArray(hist.parcels) ? hist.parcels : [];
+    if (statusEl) {
+      statusEl.textContent = `เดือน ${escapeHTML(hist.month || monthKey)} | อัปเดตล่าสุด: ${formatDateTimeTH(hist.updatedAt)} | คำขอ ${reqs.length} รายการ | พัสดุ ${parcels.length} รายการ`;
+    }
+
+    contentEl.innerHTML = `
+      <h4 style="margin:8px 0;">คำขอรับพัสดุที่เก็บเข้าประวัติ (${reqs.length})</h4>
+      <table>
+        <thead>
+          <tr><th>บ้านเลขที่</th><th>จุดรับ</th><th>สถานะ</th><th>เบอร์โทร</th><th>หมายเหตุ</th><th>เวลาบันทึก</th></tr>
+        </thead>
+        <tbody>
+          ${reqs.length ? reqs.map(r => {
+            const locName = getLocationById(r.locationId)?.name || r.locationName || '-';
+            return `<tr>
+              <td><strong>${escapeHTML(r.house)}</strong></td>
+              <td>${escapeHTML(locName)}</td>
+              <td>${escapeHTML(r.status || '-')}</td>
+              <td>${escapeHTML(r.phone || '-')}</td>
+              <td>${escapeHTML(r.note || '-')}</td>
+              <td>${formatDateTimeTH(r.createdAt)}</td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="6" style="text-align:center; color:#64748b;">ไม่มีรายการคำขอในเดือนนี้</td></tr>'}
+        </tbody>
+      </table>
+
+      <h4 style="margin:16px 0 8px;">พัสดุที่เก็บเข้าประวัติ (${parcels.length})</h4>
+      <table>
+        <thead>
+          <tr><th>บ้านเลขที่</th><th>เลขอ้างอิง</th><th>ประเภท</th><th>หมายเหตุ</th><th>เวลาเข้าระบบ</th></tr>
+        </thead>
+        <tbody>
+          ${parcels.length ? parcels.map(p => `<tr>
+            <td><strong>${escapeHTML(p.house)}</strong></td>
+            <td>${escapeHTML(p.courier || '-')}</td>
+            <td>${escapeHTML(p.tracking || '-')}</td>
+            <td>${escapeHTML(p.note || '-')}</td>
+            <td>${formatDateTimeTH(p.createdAt)}</td>
+          </tr>`).join('') : '<tr><td colspan="5" style="text-align:center; color:#64748b;">ไม่มีรายการพัสดุในเดือนนี้</td></tr>'}
+        </tbody>
+      </table>
+    `;
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'โหลดประวัติไม่สำเร็จ';
+    contentEl.innerHTML = `<div style="color:var(--danger);">เกิดข้อผิดพลาด: ${escapeHTML(err.message)}</div>`;
+  }
+};
+
+window.triggerArchiveNow = async function () {
+  const url = getCloudUrl();
+  if (!url) return alert('กรุณาตั้งค่า URL ของ Google Apps Script ก่อนย้ายเข้าประวัติรายเดือน');
+  const daysInput = document.getElementById('archiveCutoffDaysInput');
+  const cutoffDays = Math.max(0, parseInt(daysInput?.value ?? '7', 10) || 0);
+  if (!confirm(`ยืนยันย้ายรายการที่ปิดงานแล้วและเก่ากว่า ${cutoffDays} วัน เข้าไฟล์ประวัติรายเดือนบน Google Drive หรือไม่?`)) return;
+
+  const res = await pushActionToCloud({ action: 'ARCHIVE_HISTORY', cutoffDays });
+  if (res && res.ok) {
+    const sum = res.summary || {};
+    alert(`ย้ายเข้าประวัติรายเดือนสำเร็จ!\nย้ายคำขอ: ${sum.archivedRequests || 0} รายการ\nย้ายพัสดุ: ${sum.archivedParcels || 0} รายการ\nเดือนที่อัปเดต: ${(sum.affectedMonths || []).join(', ') || '-'}`);
+    renderHistoryMonthsDropdown();
+  } else {
+    alert('ไม่สามารถย้ายเข้าประวัติรายเดือนได้ กรุณาตรวจสอบการ Deploy เวอร์ชันล่าสุดของ Apps Script');
+  }
+};
 
 let lastTelegramAlertMeta = { key: '', sentAt: 0 };
 
@@ -1239,6 +1411,7 @@ function checkAutoClearTimers() {
   if (state.settings.enableAutoClearParcels) {
     const pTime = state.settings.autoClearParcelsTime || '19:00';
     if (currentHHMM >= pTime && state.settings.lastAutoClearParcelDate !== todayKey) {
+      state.parcels.forEach(p => pendingDeletedParcelIds.add(p.id));
       state.parcels = [];
       state.requests.forEach(r => {
         if (r.status === 'matched') {
@@ -1255,6 +1428,7 @@ function checkAutoClearTimers() {
     const mTime = state.settings.autoClearMatchedTime || '21:00';
     if (currentHHMM >= mTime && state.settings.lastAutoClearMatchedDate !== todayKey) {
       const before = state.requests.length;
+      state.requests.filter(r => r.status === 'matched').forEach(r => pendingDeletedRequestIds.add(r.id));
       state.requests = state.requests.filter(r => r.status !== 'matched');
       state.settings.lastAutoClearMatchedDate = todayKey;
       if (state.requests.length !== before) changed = true;
@@ -1791,6 +1965,10 @@ function bindNavigationAndAdmin() {
       document.querySelectorAll('.admin-tab-panel').forEach(panel => {
         panel.style.display = panel.id === tabId ? 'block' : 'none';
       });
+      if (tabId === 'tabMonthlyHistory') {
+        renderHistoryMonthsDropdown();
+        refreshHistoryMonthsList();
+      }
     });
   });
 
@@ -2167,6 +2345,7 @@ function bindNavigationAndAdmin() {
       const req = state.requests.find(r => r.id === parcel.matchedReqId);
       if (req && req.status === 'matched') { req.status = 'pending'; req.matchedParcelId = null; }
     }
+    pendingDeletedParcelIds.add(id);
     state.parcels = state.parcels.filter(p => p.id !== id);
     await saveAndSyncFullState();
   });
@@ -2180,6 +2359,7 @@ function bindNavigationAndAdmin() {
       const p = state.parcels.find(item => item.id === req.matchedParcelId);
       if (p) p.matchedReqId = null;
     }
+    pendingDeletedRequestIds.add(id);
     state.requests = state.requests.filter(r => r.id !== id);
     await saveAndSyncFullState();
   });
@@ -2246,6 +2426,7 @@ function renderAdminVisibility() {
   document.getElementById('adminLoginGate').style.display = state.isAdminLoggedIn ? 'none' : 'block';
   document.getElementById('adminDashboardWrap').style.display = state.isAdminLoggedIn ? 'block' : 'none';
   populateSettingsForm();
+  renderHistoryMonthsDropdown();
   updateCloudBadge();
 }
 
@@ -2297,11 +2478,13 @@ window.createReportFromSelected = async function () {
         time: formatDateTimeTH(req.createdAt)
       });
       req.status = 'reported';
+      req.completedAt = new Date().toISOString();
       req.matchedParcelId = null;
       if (parcel) reportedParcelIds.add(parcel.id);
     }
   }
 
+  reportedParcelIds.forEach(pid => pendingDeletedParcelIds.add(pid));
   state.parcels = state.parcels.filter(p => !reportedParcelIds.has(p.id));
   const includePhoneColumn = rows.some(r => r.showPhone || r.requirePhone);
   const reportObj = {
@@ -2420,6 +2603,7 @@ window.exportAndClearPendingRequests = async function () {
     XLSX.writeFile(wb, `pending-requests-${getLocalDateKey()}.xlsx`);
   }
   if (confirm(`ส่งออกไฟล์แล้ว ต้องการเคลียร์คำขอที่ยังไม่มีพัสดุทั้ง ${pending.length} รายการออกจากหน้าจอหรือไม่?`)) {
+    pending.forEach(r => pendingDeletedRequestIds.add(r.id));
     state.requests = state.requests.filter(r => r.status !== 'pending');
     await saveAndSyncFullState();
   }
@@ -2443,6 +2627,7 @@ window.exportAllRequestsExcel = function () {
 
 window.clearAllDailyParcels = async () => {
   if (!confirm('ยืนยันล้างรายการพัสดุประจำวันทั้งหมด?')) return;
+  state.parcels.forEach(p => pendingDeletedParcelIds.add(p.id));
   state.parcels = [];
   state.requests.forEach(r => { if (r.status === 'matched') { r.status = 'pending'; r.matchedParcelId = null; } });
   await saveAndSyncFullState();
@@ -2450,6 +2635,7 @@ window.clearAllDailyParcels = async () => {
 
 window.clearAllMatchedRequests = async () => {
   if (!confirm('ยืนยันลบคำขอที่จับคู่สำเร็จแล้วทั้งหมด?')) return;
+  state.requests.filter(r => r.status === 'matched').forEach(r => pendingDeletedRequestIds.add(r.id));
   state.requests = state.requests.filter(r => r.status !== 'matched');
   await saveAndSyncFullState();
 };
@@ -2468,6 +2654,8 @@ window.clearAllHouses = async () => {
 
 window.resetTransactionsOnly = async () => {
   if (!confirm('ยืนยันล้างคำขอรับพัสดุและพัสดุประจำวันทั้งหมด?')) return;
+  state.requests.forEach(r => pendingDeletedRequestIds.add(r.id));
+  state.parcels.forEach(p => pendingDeletedParcelIds.add(p.id));
   state.requests = [];
   state.parcels = [];
   await saveAndSyncFullState();
@@ -2598,10 +2786,12 @@ function renderAdminData() {
       ${state.adminAccounts.length > 1 ? `<button type="button" class="btn btn-danger btn-sm" data-delete-admin="${escapeHTML(a.id)}">ลบ</button>` : ''}
     </li>
   `).join('');
+
+  renderHistoryMonthsDropdown();
 }
 
 window.manualSyncNow = async () => {
-  if (!getCloudUrl()) return alert('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "7. การตั้งค่า" ก่อนครับ');
+  if (!getCloudUrl()) return alert('กรุณาตั้งค่า URL ของ Google Apps Script ในแท็บ "8. การตั้งค่า" ก่อนครับ');
   const ok = await pullFromCloud(false);
   if (ok) alert('ดึงข้อมูลล่าสุดจาก Cloud เรียบร้อย');
 };
